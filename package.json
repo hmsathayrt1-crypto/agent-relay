@@ -10,6 +10,7 @@
     "test": "bash test/smoke.sh && bash test/migration.sh"
   },
   "devDependencies": {
+    "jsdom": "^26.0.0",
     "wrangler": "^4.0.0"
   }
 }

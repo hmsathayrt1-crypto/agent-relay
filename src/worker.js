@@ -218,6 +218,17 @@ export class RelayHub {
     return true;
   }
 
+  // Ordered by primary key: MAX(ts) would scan the whole table on every poll.
+  _suggestedPoll() {
+    const last = this.sql.exec("SELECT ts FROM messages ORDER BY seq DESC LIMIT 1").toArray()[0];
+    const gap = Date.now() - (last ? last.ts : 0);
+    return gap < 120000 ? 5000 : gap < 600000 ? 15000 : 30000;
+  }
+
+  _leaks(s) {
+    return hasSecret(s) || (!!this.env.ADMIN_KEY && s.includes(this.env.ADMIN_KEY));
+  }
+
   // Invite redemption is the one unauthenticated write, so it is throttled per IP and uses one generic failure.
   async _redeem(request) {
     const ip = request.headers.get('CF-Connecting-IP') || 'local';
@@ -301,7 +312,7 @@ export class RelayHub {
       if (errors.length) return j({ error: 'params failed schema validation', errors }, 400);
       const params_json = JSON.stringify(params);
       if (params_json.length > MAX_TASK_JSON) return j({ error: 'params too large', max: MAX_TASK_JSON }, 413);
-      if (hasSecret(params_json)) return j({ error: 'rejected: looks like a secret — pass a reference instead' }, 422);
+      if (this._leaks(params_json)) return j({ error: 'rejected: looks like a secret — pass a reference instead' }, 422);
       const sha = await sha256hex(params_json);
       const idem = body.idem_key ? String(body.idem_key).slice(0, 100) : null;
       if (idem) {
@@ -374,7 +385,7 @@ export class RelayHub {
 
     if (action === 'reject') {
       const reason = String(body.reason || 'rejected').slice(0, 500);
-      if (hasSecret(reason)) return j({ error: 'rejected: looks like a secret' }, 422);
+      if (this._leaks(reason)) return j({ error: 'rejected: looks like a secret' }, 422);
       if (t.status === 'leased') {
         if (me !== t.to_agent || String(body.lease_token || '') !== t.lease_token || t.lease_until <= now) return j({ error: 'lease required to reject a task in progress' }, 409);
       } else if (!(isAdmin && t.status === 'awaiting_approval') && !((isAdmin || me === t.to_agent) && t.status === 'pending')) {
@@ -411,7 +422,7 @@ export class RelayHub {
       if (t.status === 'done' && lease && t.lease_token === lease) return j({ ok: true, id: t.id, status: 'done', deduplicated: true });
       const result_json = JSON.stringify(body.result === undefined ? null : body.result);
       if (result_json.length > MAX_TASK_JSON) return j({ error: 'result too large', max: MAX_TASK_JSON }, 413);
-      if (hasSecret(result_json)) return j({ error: 'rejected: looks like a secret — pass a reference instead' }, 422);
+      if (this._leaks(result_json)) return j({ error: 'rejected: looks like a secret — pass a reference instead' }, 422);
       const r = this.sql.exec("UPDATE tasks SET status='done', result_json=?, lease_until=NULL WHERE id=? AND status='leased' AND lease_token=? AND lease_until>? RETURNING id", result_json, t.id, lease, now).toArray()[0];
       if (!r) return j({ error: 'lease_lost' }, 409);
       return j({ ok: true, id: t.id, status: 'done' });
@@ -514,10 +525,12 @@ export class RelayHub {
       const tags_json = JSON.stringify(tags);
       // Checking both kinds stops anyone from rewriting a context page by relabelling it as a note.
       if ((kind === 'context' || (cur && cur.kind === 'context')) && !this._canWriteContext(me, isAdmin)) return j({ error: 'context pages need the admin or the wiki:context grant' }, 403);
-      if ([slug, title, tags_json, text].some(hasSecret) || (this.env.ADMIN_KEY && [title, tags_json, text].some(s => s.includes(this.env.ADMIN_KEY))))
+      if ([slug, title, tags_json, text].some(s => this._leaks(s)))
         return j({ error: 'rejected: looks like a secret — pass a reference instead' }, 422);
       // A retry of a write that already landed adds no version, burns no quota and does not take over the page.
       if (cur && cur.body === text && cur.title === title && cur.kind === kind && cur.tags === tags_json) return j({ ok: true, slug, version: cur.version, kind, unchanged: true });
+      // Optional. Stops an edit from silently replacing a newer version; 0 means the page must not exist yet.
+      if (body.if_version !== undefined && body.if_version !== (cur ? cur.version : 0)) return j({ error: 'page changed since you read it', current_version: cur ? cur.version : null }, 409);
       const quota = this._wikiQuota();
       if (!cur && quota.pages >= MAX_WIKI_PAGES) return j({ error: 'wiki page limit reached', max: MAX_WIKI_PAGES }, 413);
       if (quota.bytes + size > MAX_WIKI_BYTES) return j({ error: 'wiki storage quota reached', max: MAX_WIKI_BYTES, bytes: quota.bytes }, 413);
@@ -572,7 +585,8 @@ export class RelayHub {
     if (path === '/v2/join' && method === 'POST' && !token) return this._redeem(request);
     const me = await this._agentByToken(token);
     if (!me) return j({ error: 'unauthorized' }, 401);
-    this.sql.exec("UPDATE agents SET last_seen=? WHERE name=?", Date.now(), me);
+    // Every poll lands here, so last_seen is only kept to the minute instead of writing a row each time.
+    this.sql.exec("UPDATE agents SET last_seen=? WHERE name=? AND COALESCE(last_seen,0)<?", Date.now(), me, Date.now() - 60000);
     const isAdmin = me === '__admin__';
     let body = {};
     if ((method === 'POST' || method === 'PUT') && !isFileContent(path)) {
@@ -629,9 +643,18 @@ export class RelayHub {
         return j({ agents: rows });
       }
       if (path === '/v2/log' && isAdmin && method === 'GET') {
-        const after = Number(url.searchParams.get('after') || 0);
+        const after = Math.max(0, Number(url.searchParams.get('after')) || 0);
         const rows = this.sql.exec("SELECT seq, id, from_agent, to_agent, kind, body, ts FROM messages WHERE seq > ? ORDER BY seq LIMIT 200", after).toArray();
-        return j({ messages: rows });
+        return j({ messages: rows, next_after: rows.length ? rows[rows.length - 1].seq : after, suggested_poll_ms: this._suggestedPoll() });
+      }
+
+      // Lets a client check a key and learn its grants without touching the inbox cursors.
+      if (path === '/v2/me' && method === 'GET') {
+        const peers = isAdmin
+          ? this.sql.exec("SELECT name FROM agents WHERE status='active' ORDER BY name").toArray()
+          : this.sql.exec("SELECT a.name FROM acl JOIN agents a ON a.name=acl.to_agent WHERE acl.from_agent=? AND acl.kind='msg' AND a.status='active' ORDER BY a.name", me).toArray();
+        const can_broadcast = isAdmin || !!this.sql.exec("SELECT 1 FROM acl WHERE from_agent=? AND to_agent='__all__' AND kind='broadcast'", me).toArray()[0];
+        return j({ agent: me, is_admin: isAdmin, peers: peers.map(r => r.name), can_broadcast, can_write_context: this._canWriteContext(me, isAdmin) });
       }
 
       // ---------- messages ----------
@@ -640,7 +663,8 @@ export class RelayHub {
         const text = body.text;
         if (typeof text !== 'string' || !text.trim()) return j({ error: 'text required' }, 400);
         if (text.length > MAX_MSG) return j({ error: 'message too large', max: MAX_MSG }, 413);
-        if (hasSecret(text) || (this.env.ADMIN_KEY && text.includes(this.env.ADMIN_KEY))) return j({ error: 'rejected: looks like a secret — pass a reference/file instead' }, 422);
+        if (this._leaks(text)) return j({ error: 'rejected: looks like a secret — pass a reference/file instead' }, 422);
+        if (body.thread_id !== undefined && String(body.thread_id).length > 100) return j({ error: 'thread_id too long' }, 400);
 
         let toAgent;
         if (to === '__all__') toAgent = '__all__';
@@ -669,7 +693,7 @@ export class RelayHub {
           if (!this._bump('day:' + me, 24 * 3600 * 1000, DAY_MAX)) return j({ error: 'daily quota exceeded' }, 429);
           if (!this._bump('dup:' + me + ':' + await sha256hex(text.trim()), PAIR_WINDOW_MS, DUP_MAX - 1)) return j({ error: 'duplicate text flooded — rejected' }, 429);
         }
-        let hop = 0, thread = body.thread_id || null;
+        let hop = 0, thread = body.thread_id ? String(body.thread_id) : null;
         if (body.reply_to) {
           const p = this.sql.exec("SELECT hop, thread_id, to_agent, from_agent FROM messages WHERE id=?", String(body.reply_to)).toArray()[0];
           if (!p) return j({ error: 'reply_to not found' }, 400);
@@ -680,7 +704,6 @@ export class RelayHub {
         }
         const id = Date.now() + '-' + crypto.randomUUID().slice(0, 8);
         const ts = Date.now();
-        if (body.thread_id !== undefined && String(body.thread_id).length > 100) return j({ error: 'thread_id too long' }, 400);
         this.sql.exec("INSERT INTO messages(id, from_agent, to_agent, kind, body, thread_id, reply_to, hop, idem_key, ts) VALUES(?,?,?,?,?,?,?,?,?,?)",
           id, me, toAgent, 'text', text, thread, body.reply_to || null, hop, idem, ts);
         const seq = this.sql.exec("SELECT seq FROM messages WHERE id=?", id).toArray()[0].seq;
@@ -696,19 +719,18 @@ export class RelayHub {
       }
 
       if (path === '/v2/inbox' && method === 'GET') {
-        const after = Number(url.searchParams.get('after') || 0);
+        const after = Math.max(0, Number(url.searchParams.get('after')) || 0);
+        // sent=1 adds your own messages, so a client can show both sides of a conversation.
+        const sent = url.searchParams.get('sent') === '1';
         const rows = this.sql.exec(
-          "SELECT seq, id, from_agent, to_agent, kind, body, thread_id, reply_to, hop, ts FROM messages WHERE seq > ? AND (to_agent=? OR (to_agent='__all__' AND from_agent != ?)) ORDER BY seq LIMIT 100",
-          after, me, me).toArray();
+          "SELECT seq, id, from_agent, to_agent, kind, body, thread_id, reply_to, hop, ts FROM messages WHERE seq > ? AND (to_agent=? OR (to_agent='__all__' AND from_agent != ?)" + (sent ? " OR from_agent=?" : "") + ") ORDER BY seq LIMIT 100",
+          after, me, me, ...(sent ? [me] : [])).toArray();
         if (rows.length) {
           const maxSeq = rows[rows.length - 1].seq;
           this.sql.exec("INSERT INTO cursors(agent, delivered_seq, updated_at) VALUES(?,?,?) ON CONFLICT(agent) DO UPDATE SET delivered_seq=MAX(delivered_seq, ?), updated_at=?",
             me, maxSeq, Date.now(), maxSeq, Date.now());
         }
-        const recent = this.sql.exec("SELECT MAX(ts) AS m FROM messages").toArray()[0].m || 0;
-        const gap = Date.now() - recent;
-        const suggested = gap < 120000 ? 5000 : gap < 600000 ? 15000 : 30000;
-        return j({ agent: me, messages: rows, next_after: rows.length ? rows[rows.length - 1].seq : after, suggested_poll_ms: suggested });
+        return j({ agent: me, messages: rows, next_after: rows.length ? rows[rows.length - 1].seq : after, suggested_poll_ms: this._suggestedPoll() });
       }
 
       if (path === '/v2/ack' && method === 'POST') {
@@ -737,13 +759,14 @@ export class RelayHub {
         const name = String(body.name || 'file').replace(/[\u0000-\u001f\u202e]/g, '');
         const size = Number(body.size || 0);
         const sha = String(body.sha256 || '');
+        if (name.length > 200) return j({ error: 'file name too long', max: 200 }, 400);
         if (!NAME_RE.test(to)) return j({ error: 'invalid recipient' }, 400);
         if (!this.sql.exec("SELECT 1 FROM agents WHERE name=? AND status='active'", to).toArray()[0]) return j({ error: 'unknown recipient' }, 400);
         if (!isAdmin && !this.sql.exec("SELECT 1 FROM acl WHERE from_agent=? AND to_agent=? AND kind='file'", me, to).toArray()[0])
           return j({ error: 'acl denies file to ' + to }, 403);
         const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
         if (!ALLOWED_EXT.includes(ext)) return j({ error: 'extension not allowed: ' + ext }, 415);
-        if (size <= 0 || size > MAX_FILE) return j({ error: 'size out of range (max 10MB)' }, 413);
+        if (!Number.isInteger(size) || size <= 0 || size > MAX_FILE) return j({ error: 'size out of range (max 10MB)' }, 413);
         if (!/^[a-f0-9]{64}$/.test(sha)) return j({ error: 'sha256 required' }, 400);
         const id = 'f' + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
         this.sql.exec("INSERT INTO files(id, owner, to_agent, name, size, sha256, status, r2_key, created_at, expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -849,6 +872,8 @@ export default {
     }
 
     if (url.pathname.startsWith('/v2/')) {
+      // Only invite redemption works without a key, so anything else stops here without waking the Durable Object.
+      if (!request.headers.get('Authorization') && !(url.pathname === '/v2/join' && request.method === 'POST')) return j({ error: 'unauthorized' }, 401);
       // Buffer under the cap here, before waking the Durable Object. Leaving a stream half read across
       // the DO boundary throws in the runtime ("Can't read from request stream after response has been sent").
       const limit = isFileContent(url.pathname) ? MAX_FILE : jsonCap(url.pathname, request.method);

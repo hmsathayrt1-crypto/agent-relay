@@ -12,6 +12,9 @@
 #   LIVE_WIKI_CONTEXT_AGENT holds the wiki:context grant.
 #   The 5MB and 200 page limits are not filled here, because that would block real writers. test/smoke.sh covers them.
 #
+# Page and read-only checks, no admin key, no message read and nothing written:
+#   RELAY_URL=... AGENT_KEYS_FILE=path bash test/live.sh page
+#
 # It also leaves one task holding a lease. Run the printed command after the lease has lapsed (5 minutes):
 #   bash test/live.sh lease TASK_ID TYPE
 set -u
@@ -86,6 +89,33 @@ wiki_chain() {
   # Only the admin can erase history. With agent keys, these rows expire 14 days after the delete.
   if [ "$PN" = __admin__ ]; then for s in "$S1" "$S2" "$S3" "$S4"; do expect "purge $s" 200 DELETE "/v2/wiki/$s?purge=1" "$P"; done; fi
 }
+
+if [ "${1:-}" = page ]; then
+  : "${AGENT_KEYS_FILE:?set AGENT_KEYS_FILE}"
+  echo "== page"
+  code=$(curl -sS -D "$TMP/hdr" -o "$TMP/page.html" -w '%{http_code}' "$BASE/"); eq "page serves" "$code" 200
+  NONCE=$(tr -d '\r' < "$TMP/hdr" | sed -n "s/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: .*script-src 'nonce-\([0-9a-f]*\)'.*/\1/p")
+  [ -n "$NONCE" ] && ok "  CSP names a nonce" || no "  CSP names a nonce"
+  grep -q "<style nonce=\"$NONCE\">" "$TMP/page.html" && grep -q "<script nonce=\"$NONCE\">" "$TMP/page.html" && ok "  style and script carry it" || no "  style and script carry it"
+  ! grep -q __CSP_NONCE__ "$TMP/page.html" && ok "  no placeholder left" || no "  no placeholder left"
+  [ "$(curl -sS -D - -o /dev/null "$BASE/" | grep -ci "nonce-$NONCE")" = 0 ] && ok "  changes on every request" || no "  changes on every request"
+  for id in tab-chat tab-wiki tab-approvals chat wiki approvals send txt; do grep -q "id=\"$id\"" "$TMP/page.html" && ok "  has #$id" || no "  has #$id"; done
+  grep -q 'name="viewport" content="width=device-width' "$TMP/page.html" && ok "  viewport" || no "  viewport"
+  grep -q 'name="color-scheme" content="light"' "$TMP/page.html" && grep -q 'name="theme-color"' "$TMP/page.html" && ok "  color-scheme and theme-color" || no "  color-scheme and theme-color"
+  grep -q 100dvh "$TMP/page.html" && ok "  100dvh" || no "  100dvh"
+  echo "== new endpoints, without touching messages or cursors"
+  expect "no key stops at the Worker" 401 GET /v2/me ''
+  while IFS='=' read -r n k; do
+    [ -n "$n" ] || continue
+    expect "$n: /v2/me" 200 GET /v2/me "$k"; eq "  resolves to $n" "$(field .agent)" "$n"; eq "  not admin" "$(field .is_admin)" false
+    expect "  empty read with sent=1" 200 GET '/v2/inbox?after=999999999&sent=1' "$k"; eq "    no rows, so no cursor moves" "$(jq '.messages|length' <<<"$out")" 0
+  done < "$AGENT_KEYS_FILE"
+  # Refused before anything is stored or counted.
+  k=$(sed -n '1s/^[^=]*=//p' "$AGENT_KEYS_FILE")
+  api GET '/v2/wiki?kind=note' "$k"; S=$(jq -r '.pages[0].slug // empty' <<<"$out")
+  if [ -n "$S" ]; then expect "stale if_version is refused on /$S" 409 PUT "/v2/wiki/$S" "$k" '{"body":"[relay check, never stored]","if_version":-1}'; else no "a note page to test if_version on"; fi
+  summary "live page"; exit
+fi
 
 if [ "${1:-}" = wiki ]; then
   : "${AGENT_KEYS_FILE:?set AGENT_KEYS_FILE}" "${LIVE_WIKI_AGENT:?set LIVE_WIKI_AGENT}" "${LIVE_WIKI_CONTEXT_AGENT:?set LIVE_WIKI_CONTEXT_AGENT}"

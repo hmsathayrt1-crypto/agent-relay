@@ -402,7 +402,7 @@ grep -qi "^content-security-policy: default-src 'none'; script-src 'nonce-" "$TM
 pc=''; for i in $(seq 1 130); do pc=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/"); [ "$pc" = 429 ] && break; done
 eq "page flood is 429" "$pc" 429
 
-echo "== page script against hostile data"
+echo "== page in jsdom against hostile data"
 node "$ROOT/test/page-check.mjs" && ok "page script passes" || no "page script passes"
 
 echo "== wiki: deleted history expires (WIKI_TOMBSTONE_MS=1000 in this relay)"
@@ -417,6 +417,54 @@ eq "an alarm runs" "$(wait_status "$ST" failed)" failed
 expect "expired history is removed" 404 GET /v2/wiki/old/history "$A2"
 expect "live page keeps its history" 200 GET /v2/wiki/keep/history "$A2"; eq "  one old version" "$(field .total)" 1
 api GET /v2/wiki "$A2"; eq "  bytes are released" "$(jq -c '[.quota.pages,.quota.bytes]' <<<"$out")" "[1,$((4 + 5))]"
+
+echo "== page endpoints"
+UA=$(join ui-a); UB=$(join ui-b); UC=$(join ui-c); UD=$(join ui-d)
+acl ui-a ui-b msg; acl ui-a ui-c msg; acl ui-a ui-b file; acl ui-a __all__ broadcast
+api GET /v2/me "$UA"; eq "me names the agent" "$(jq -c '[.agent,.is_admin,.can_broadcast,.can_write_context]' <<<"$out")" '["ui-a",false,true,false]'; eq "  lists who it may message" "$(jq -c .peers <<<"$out")" '["ui-b","ui-c"]'
+api POST /v2/revoke "$ADMIN" '{"agent":"ui-c"}'; api GET /v2/me "$UA"; eq "  a revoked peer leaves the list" "$(jq -c .peers <<<"$out")" '["ui-b"]'
+api GET /v2/me "$UB"; eq "  no grants means an empty list" "$(jq -c '[.peers,.can_broadcast]' <<<"$out")" '[[],false]'
+api GET /v2/me "$ADMIN"; eq "  admin sees active agents and every grant" "$(jq -c '[.agent,.is_admin,(.peers|index("ui-b")!=null),(.peers|index("ui-c")!=null),.can_broadcast,.can_write_context]' <<<"$out")" '["__admin__",true,true,false,true,true]'
+expect "no key stops at the Worker" 401 GET /v2/me ''; expect "wrong key is refused" 401 GET /v2/me ark_wrong
+expect "unknown route with no key is 401 too" 401 GET /v2/nope ''
+api POST /v2/messages "$UA" '{"to":"ui-b","text":"from a to b"}'; SEQ=$(field .msg.seq)
+api POST /v2/messages "$UA" '{"to":"__all__","text":"a to everyone"}'
+acl ui-b ui-a msg; api POST /v2/messages "$UB" '{"to":"ui-a","text":"from b to a"}'
+bodies() { jq -c '[.messages[].body]' <<<"$out"; }
+api GET "/v2/inbox?after=$((SEQ - 1))" "$UA"; eq "inbox alone leaves out your own messages" "$(bodies)" '["from b to a"]'
+api GET "/v2/inbox?after=$((SEQ - 1))&sent=1" "$UA"; eq "sent=1 adds them, once and in order" "$(bodies)" '["from a to b","a to everyone","from b to a"]'
+api GET "/v2/inbox?after=$((SEQ - 1))&sent=1" "$UD"; eq "sent=1 shows no one else's direct messages" "$(bodies)" '["a to everyone"]'
+api GET "/v2/inbox?after=999999999&sent=1" "$UA"; eq "a cursor past the end returns nothing" "$(bodies)" '[]'; eq "  and keeps a poll hint" "$(field .suggested_poll_ms)" 5000
+expect "a bad cursor reads from the start" 200 GET "/v2/inbox?after=abc" "$UD"; eq "  next_after is a number" "$(jq '.next_after|type' <<<"$out")" '"number"'
+api GET "/v2/log?after=$SEQ" "$ADMIN"; eq "log reports where to continue" "$(jq -c '[(.next_after-.messages[-1].seq),.suggested_poll_ms]' <<<"$out")" '[0,5000]'
+expect "agents still cannot read the log" 404 GET /v2/log "$UA"
+expect "an object as thread_id is not a 500" 200 POST /v2/messages "$UA" '{"to":"ui-b","text":"thread object","thread_id":{"a":1}}'
+api GET /v2/agents "$ADMIN"; T1=$(jq '.agents[]|select(.name=="ui-a").last_seen' <<<"$out"); sleep 1; api GET /v2/me "$UA"; api GET /v2/agents "$ADMIN"
+eq "last_seen is written at most once a minute" "$(jq '.agents[]|select(.name=="ui-a").last_seen' <<<"$out")" "$T1"
+
+echo "== wiki: if_version"
+guard() { jq -cn --arg body "$1" --argjson v "$2" '{title:"g",kind:"note",body:$body,if_version:$v}'; }
+expect "if_version 0 creates a new page" 200 PUT /v2/wiki/guard "$UA" "$(guard one 0)"
+expect "  and refuses a slug in use" 409 PUT /v2/wiki/guard "$UB" "$(guard two 0)"; eq "    reports the current version" "$(field .current_version)" 1
+expect "the right version saves" 200 PUT /v2/wiki/guard "$UA" "$(guard two 1)"; eq "  as version 2" "$(field .version)" 2
+expect "a stale version is refused" 409 PUT /v2/wiki/guard "$UB" "$(guard three 1)"
+api GET /v2/wiki/guard "$UB"; eq "  the newer text survives" "$(jq -c '[.body,.version,.updated_by]' <<<"$out")" '["two",2,"ui-a"]'
+expect "a retry of a save that landed is still fine" 200 PUT /v2/wiki/guard "$UA" "$(guard two 1)"; eq "  unchanged" "$(field .unchanged)" true
+expect "no if_version keeps last write wins" 200 PUT /v2/wiki/guard "$UB" '{"body":"four"}'
+expect "a non-number version is refused" 409 PUT /v2/wiki/guard "$UB" '{"body":"five","if_version":"3"}'
+expect "editing a deleted page is refused" 200 DELETE /v2/wiki/guard "$UB"; expect "  with no current version" 409 PUT /v2/wiki/guard "$UA" "$(guard six 3)"; eq "    null" "$(field .current_version)" null
+expect "if_version 0 can reuse a deleted slug" 200 PUT /v2/wiki/guard "$UA" "$(guard seven 0)"
+
+echo "== small fixes"
+LONG=$(head -c 197 /dev/zero | tr '\0' a).md
+expect "file name over 200 characters is 400" 400 POST /v2/files "$UA" "$(jq -cn --arg n "x$LONG" '{to:"ui-b",name:$n,size:1,sha256:"'"$(printf 'a%.0s' $(seq 1 64))"'"}')"
+expect "fractional file size is 413" 413 POST /v2/files "$UA" "$(jq -cn '{to:"ui-b",name:"a.txt",size:1.5,sha256:"'"$(printf 'a%.0s' $(seq 1 64))"'"}')"
+api POST /v2/task-types "$ADMIN" '{"name":"ui.echo","schema":{"type":"object"},"risk":"low","max_attempts":2}'; acl ui-a ui-b task:ui.echo
+expect "admin key in task params is 422" 422 POST /v2/tasks "$UA" "$(jq -cn --arg k "$ADMIN" '{type:"ui.echo",to:"ui-b",params:{note:$k}}')"
+api POST /v2/tasks "$UA" '{"type":"ui.echo","to":"ui-b","params":{"n":1}}'; UT=$(field .task.id)
+expect "admin key in a reject reason is 422" 422 POST "/v2/tasks/$UT/reject" "$UB" "$(jq -cn --arg k "$ADMIN" '{reason:$k}')"
+api POST "/v2/tasks/$UT/claim" "$UB"; UL=$(field .lease_token)
+expect "admin key in a task result is 422" 422 POST "/v2/tasks/$UT/complete" "$UB" "$(jq -cn --arg k "$ADMIN" --arg l "$UL" '{lease_token:$l,result:{x:$k}}')"
 
 echo "== logging"
 ! grep -q 'Uncaught' "$TMP/wrangler.log" && ok "no uncaught runtime errors" || no "no uncaught runtime errors" "$(grep -m1 'Uncaught' "$TMP/wrangler.log")"

@@ -1,165 +1,205 @@
 <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Relay — قناة الوكلاء</title><style nonce="__CSP_NONCE__">
-*{box-sizing:border-box}[hidden]{display:none!important}body{font-family:system-ui,"Segoe UI",Tahoma,sans-serif;background:#0f1115;color:#e8e8e8;margin:0;display:flex;justify-content:center}
-#app{width:100%;max-width:720px;padding:16px;display:flex;flex-direction:column;height:100vh}
-header{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid #262a33}
-header input{flex:1;background:#1a1e26;border:1px solid #2c313c;color:#e8e8e8;border-radius:8px;padding:8px 12px;font-size:14px}
-header button{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px}
-#log{flex:1;overflow-y:auto;padding:12px 0;display:flex;flex-direction:column;gap:8px}
-.m{max-width:85%;padding:8px 12px;border-radius:10px;font-size:14px;line-height:1.5;word-break:break-word}
-.m .h{font-size:11px;opacity:.6;margin-bottom:3px}
-.mine{align-self:flex-start;background:#1e2b4d}
-.other{align-self:flex-end;background:#232733}
-.sys{align-self:center;background:#1a1e26;color:#9aa;font-size:12px}
-#bar{display:flex;gap:8px;padding-top:12px;border-top:1px solid #262a33}
-#bar select{background:#1a1e26;border:1px solid #2c313c;color:#e8e8e8;border-radius:8px;padding:8px}
-#bar input{flex:1;background:#1a1e26;border:1px solid #2c313c;color:#e8e8e8;border-radius:8px;padding:8px 12px;font-size:14px}
-#bar button{background:#16a34a;color:#fff;border:0;border-radius:8px;padding:8px 18px;cursor:pointer}
-#approvals{max-height:45vh;overflow-y:auto;padding:10px 0;border-bottom:1px solid #262a33}
-#approvals h3{margin:0 0 8px;font-size:14px}
-.task{background:#2a2312;border:1px solid #6b5518;border-radius:10px;padding:10px;margin-bottom:8px;font-size:13px}
-.task pre{direction:ltr;text-align:left;background:#0f1115;border-radius:6px;padding:8px;margin:6px 0;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
-.task .sha{direction:ltr;font-family:monospace;font-size:11px;opacity:.7;word-break:break-all}
-.task button{border:0;border-radius:8px;padding:8px 16px;margin-top:8px;margin-left:8px;color:#fff;cursor:pointer}
-.task .ok{background:#16a34a}.task .no{background:#b91c1c}
-#tabs{display:flex;gap:6px;padding:10px 0;border-bottom:1px solid #262a33}
-#tabs button{flex:1;background:#1a1e26;color:#9aa;border:1px solid #2c313c;border-radius:8px;padding:8px;cursor:pointer;font-size:14px}
-#tabs button.on{background:#2563eb;border-color:#2563eb;color:#fff}
-#chat,#wiki{flex:1;min-height:0;display:flex;flex-direction:column}
-#wiki{overflow-y:auto;padding:12px 0;gap:10px}
-#wbar{display:flex;flex-wrap:wrap;gap:8px}
-#wiki input,#wiki select,#wiki textarea{background:#1a1e26;border:1px solid #2c313c;color:#e8e8e8;border-radius:8px;padding:8px;font-size:14px;font-family:inherit}
-#wq{flex:1;min-width:140px}
-#wiki button{background:#232733;color:#e8e8e8;border:1px solid #2c313c;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px}
-#wiki button.primary{background:#16a34a;border-color:#16a34a;color:#fff}
-#wmsg{color:#f0b35a;font-size:13px}#wmsg:empty{display:none}
-#wlist,#whist{display:flex;flex-direction:column;gap:6px}
-#wiki button.wi{display:block;width:100%;text-align:start;background:#1a1e26;line-height:1.5}
-.wi .t{display:block;font-weight:600;word-break:break-word}
-.wi .d,#wmeta{display:block;font-size:12px;opacity:.65;word-break:break-word}
-.chip{display:inline-block;background:#232733;border-radius:6px;padding:1px 7px;margin-inline-end:4px;font-size:12px}
-.chip.badge{background:#2a2312;border:1px solid #6b5518}
-#wview h2{margin:8px 0 4px;font-size:18px;word-break:break-word}
-#wtags{margin:6px 0}
-#wbody{white-space:pre-wrap;word-break:break-word;unicode-bidi:plaintext;background:#1a1e26;border-radius:8px;padding:12px;margin:8px 0;font-family:inherit;font-size:14px;line-height:1.6}
-#wform{display:flex;flex-direction:column;gap:8px}
-#fbody{min-height:40vh;resize:vertical;unicode-bidi:plaintext}
-#fslug{direction:ltr}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#f7f6f2">
+<title>Agent Relay</title><style nonce="__CSP_NONCE__">
+:root{color-scheme:light;--bg:#f7f6f2;--surface:#fff;--ink:#1a1d21;--muted:#5c636c;--line:#e2e0d8;--accent:#0b6e5f;--accent-dark:#085548;--accent-soft:#e0f2ed;--danger:#b3261e;--danger-soft:#fcecea;--warn:#92400e;--warn-soft:#fdf0d8;--tap:44px;--r:12px}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg)}
+body{color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI","SF Arabic","Noto Sans Arabic","Noto Naskh Arabic",Tahoma,sans-serif;-webkit-text-size-adjust:100%}
+.screen{height:100%;display:flex;flex-direction:column;width:100%;max-width:760px;margin-inline:auto;background:var(--bg)}
+@supports (height:100dvh){.screen{height:var(--app-h,100dvh)}}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+/* Controls. 16px text keeps iOS from zooming the page on focus. */
+button,input,select,textarea{font:inherit;color:inherit;border-radius:var(--r)}
+input,select,textarea{width:100%;min-height:var(--tap);background:var(--surface);border:1px solid var(--line);padding:9px 12px;font-size:16px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+textarea{display:block;resize:none;line-height:1.5}
+label{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
+button{min-height:var(--tap);padding:0 16px;border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background-color .12s,transform .08s}
+button:active{transform:scale(.98);background:var(--bg)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.45;cursor:default;transform:none}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:active{background:var(--accent-dark)}
+button.approve{background:var(--accent);border-color:var(--accent);color:#fff;min-height:52px;font-size:17px}
+button.approve:active{background:var(--accent-dark)}
+button.reject{background:var(--surface);border-color:var(--danger);color:var(--danger);min-height:52px;font-size:17px}
+button.reject:active{background:var(--danger-soft)}
+button.quiet{border-color:transparent;background:transparent;color:var(--muted);padding:0 10px}
+button.quiet:active{background:var(--line)}
+@media (hover:hover){button:hover:not(:disabled){background:var(--bg)}button.primary:hover:not(:disabled),button.approve:hover:not(:disabled){background:var(--accent-dark)}button.reject:hover:not(:disabled){background:var(--danger-soft)}button.quiet:hover:not(:disabled){background:var(--line)}}
+
+/* Login */
+#login-view{justify-content:center;padding:24px max(20px,env(safe-area-inset-right)) 24px max(20px,env(safe-area-inset-left))}
+#login-view h1{margin:0;font-size:28px;line-height:1.2;direction:ltr;text-align:end;letter-spacing:-.01em}
+#login-view p{margin:6px 0 24px;color:var(--muted)}
+#login-view p.msg{margin:12px 0 0;color:var(--danger)}
+#key{direction:ltr;margin-bottom:12px}
+#login{width:100%;min-height:52px;font-size:17px}
+
+/* Header and tabs */
+header{display:flex;align-items:center;gap:8px;padding:max(6px,env(safe-area-inset-top)) 16px 6px;min-height:52px}
+header b{font-size:17px;direction:ltr;letter-spacing:-.01em}
+#who{margin-inline-start:auto;font-size:14px;color:var(--muted);direction:ltr;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+nav{display:flex;border-bottom:1px solid var(--line);padding-inline:8px}
+nav button{flex:1;min-height:50px;padding:0 4px;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;color:var(--muted);font-size:16px;display:flex;align-items:center;justify-content:center;gap:6px}
+nav button:active{transform:none;background:transparent}
+nav button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+@media (hover:hover){nav button:hover:not(:disabled){background:transparent;color:var(--ink)}}
+.badge{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--danger);color:#fff;font-size:13px;line-height:22px;text-align:center}
+#net{background:var(--warn-soft);color:var(--warn);font-size:14px;padding:6px 16px}
+.panel{flex:1;min-height:0;display:flex;flex-direction:column}
+.scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:12px 16px}
+.empty{color:var(--muted);text-align:center;margin:40px 16px}
+.msg{font-size:14px;color:var(--danger);margin:0;padding:0 2px}
+.msg:empty{display:none}
+
+/* Chat */
+#log{display:flex;flex-direction:column;gap:8px}
+.m{max-width:86%;padding:8px 12px;border-radius:14px;border:1px solid var(--line);background:var(--surface);align-self:flex-end}
+.m.mine{align-self:flex-start;background:var(--accent-soft);border-color:#c5e6dd}
+.m .h{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);line-height:1.3;min-height:20px}
+.m .h .t{margin-inline-start:auto;white-space:nowrap}
+.m .b{white-space:pre-wrap;overflow-wrap:anywhere;unicode-bidi:plaintext}
+/* The tap area is 44px, and the negative margin stops it from making every bubble taller. */
+.m button.copy{min-height:var(--tap);margin-block:-12px;margin-inline-end:-8px;padding:0 8px;font-size:13px;font-weight:500}
+#jump{position:absolute;bottom:8px;inset-inline-start:50%;transform:translateX(50%);min-height:40px;border-radius:20px;background:var(--ink);border-color:var(--ink);color:#fff;font-size:14px;z-index:1}
+#jump:active{transform:translateX(50%);background:var(--ink)}
+#chat .stage{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+#bar{border-top:1px solid var(--line);background:var(--surface);padding:8px 12px max(8px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
+#bar .to{display:flex;align-items:center;gap:8px}
+#bar .to label{margin:0;color:var(--muted);font-weight:500}
+#to{flex:1;min-width:0;background:var(--bg)}
+#bar .write{display:flex;align-items:flex-end;gap:8px}
+#txt{flex:1;width:auto;min-width:0;max-height:132px;overflow-y:auto;background:var(--bg);unicode-bidi:plaintext}
+#send{flex:none;padding:0 20px}
+
+/* Wiki */
+#wbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+#wq{flex:1 1 100%}
+#wkind{flex:1;width:auto;min-width:0}
+#wlist{display:flex;flex-direction:column;gap:8px}
+button.wi{display:block;width:100%;min-height:60px;padding:10px 14px;text-align:start;font-weight:400;line-height:1.45}
+.wi .t{display:block;font-weight:600;overflow-wrap:anywhere}
+.wi .d{display:block;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+#wquota{font-size:13px;color:var(--muted);text-align:center;margin:14px 0 2px}
+#wmsg{margin-bottom:10px}
+#wmsg.info{color:var(--warn)}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-</style></head><body><div id="app">
-<header><span>📡 Agent Relay v2</span><input id="key" type="password" placeholder="مفتاح الوكيل أو الأدمن"><button id="login">دخول</button></header>
-<nav id="tabs"><button id="tab-chat" class="on">شات</button><button id="tab-wiki">ويكي</button></nav>
-<section id="approvals" hidden><h3>موافقات معلّقة</h3><div id="apl"></div></section>
-<div id="chat"><div id="log"></div>
-<div id="bar"><select id="to"></select>
-<input id="txt" placeholder="اكتب رسالة... (Enter للإرسال)">
-<button id="send">إرسال</button></div></div>
-<section id="wiki" hidden>
-<div id="wbar"><select id="wkind"><option value="">كل الأنواع</option><option value="skill">مهارة</option><option value="context">سياق</option><option value="note">ملاحظة</option></select>
-<input id="wq" type="search" placeholder="بحث في العنوان والنص (Enter)"><button id="wnew">صفحة جديدة</button></div>
-<div id="wmsg" role="status"></div>
+.row .end{margin-inline-start:auto}
+#wtitle{margin:12px 0 6px;font-size:22px;line-height:1.3;overflow-wrap:anywhere}
+.chip{display:inline-block;background:var(--line);border-radius:7px;padding:1px 8px;margin-inline-end:4px;margin-bottom:4px;font-size:13px}
+.chip.badge2{background:var(--warn-soft);color:var(--warn)}
+#wmeta{display:block;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+#wbody{white-space:pre-wrap;overflow-wrap:anywhere;unicode-bidi:plaintext;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:12px 0;font:inherit;line-height:1.7}
+#whistbox summary{min-height:var(--tap);display:flex;align-items:center;cursor:pointer;font-weight:600}
+#whist{display:flex;flex-direction:column;gap:6px}
+#whist button{width:100%;text-align:start;font-weight:400;font-size:14px;padding:8px 12px;overflow-wrap:anywhere}
+#wform{display:flex;flex-direction:column;gap:12px}
+#fbody{min-height:40dvh;resize:vertical;unicode-bidi:plaintext}
+#fslug{direction:ltr}
+#fslug:disabled{background:var(--bg);color:var(--muted)}
+#wform .acts{display:flex;gap:8px;position:sticky;bottom:-12px;background:var(--bg);padding:8px 0 12px}
+#wform .acts button{flex:1}
+
+/* Approvals */
+.task{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.task .ty{font-size:18px;font-weight:700;direction:ltr;text-align:end;overflow-wrap:anywhere}
+.task .wh{font-size:14px;color:var(--muted);margin:2px 0 8px;overflow-wrap:anywhere}
+.task pre{direction:ltr;text-align:left;background:var(--bg);border-radius:8px;padding:10px;margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
+.task .sha{direction:ltr;text-align:left;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.task .acts{display:flex;gap:8px;margin-top:12px}
+.task .acts button{flex:1;padding:0 8px}
+.task .q{font-weight:600;margin:12px 0 0}
+.task .msg{margin-top:8px}
+
+/* Toast */
+#toast{position:fixed;top:calc(env(safe-area-inset-top) + 8px);inset-inline:16px;margin-inline:auto;max-width:440px;background:var(--ink);border-color:var(--ink);color:#fff;font-weight:500;z-index:5}
+#toast:active{background:var(--ink)}
+@media (hover:hover){#toast:hover:not(:disabled){background:var(--ink)}}
+.offscreen{position:fixed;top:0;inset-inline-start:-9999px;font-size:16px}
+@media (prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}
+</style></head><body>
+
+<main id="login-view" class="screen">
+<h1>Agent Relay</h1>
+<p>قناة وكلائك. أدخل مفتاحك للمتابعة.</p>
+<label for="key">المفتاح</label>
+<input id="key" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+<button id="login" class="primary">دخول</button>
+<p id="login-msg" class="msg" role="alert"></p>
+</main>
+
+<div id="app-view" class="screen" hidden>
+<header><b>Agent Relay</b><span id="who"></span><button id="logout" class="quiet">خروج</button></header>
+<nav role="tablist" aria-label="الأقسام">
+<button id="tab-chat" role="tab" aria-controls="chat" aria-selected="true">شات <span id="badge-chat" class="badge" hidden></span></button>
+<button id="tab-wiki" role="tab" aria-controls="wiki" aria-selected="false">ويكي</button>
+<button id="tab-approvals" role="tab" aria-controls="approvals" aria-selected="false" hidden>موافقات <span id="badge-approvals" class="badge" hidden></span></button>
+</nav>
+<div id="net" role="status" hidden>تعذر الاتصال. تجري إعادة المحاولة…</div>
+
+<section id="chat" class="panel" role="tabpanel" aria-labelledby="tab-chat">
+<div class="stage">
+<div id="logbox" class="scroll"><p id="logempty" class="empty">لا توجد رسائل بعد.</p><div id="log"></div></div>
+<button id="jump" hidden>رسائل جديدة ↓</button>
+</div>
+<div id="bar">
+<p id="chatmsg" class="msg" role="alert"></p>
+<div class="to"><label for="to">إلى</label><select id="to"></select></div>
+<div class="write"><textarea id="txt" rows="1" maxlength="8000" placeholder="اكتب رسالة" aria-label="نص الرسالة" dir="auto"></textarea><button id="send" class="primary">إرسال</button></div>
+</div>
+</section>
+
+<section id="wiki" class="panel" role="tabpanel" aria-labelledby="tab-wiki" hidden>
+<div id="wscroll" class="scroll">
+<div id="wmsg" class="msg" role="status"></div>
+<div id="wbar">
+<input id="wq" type="search" placeholder="بحث في العنوان والنص" aria-label="بحث" enterkeyhint="search" dir="auto">
+<select id="wkind" aria-label="النوع"><option value="">كل الأنواع</option><option value="skill">مهارة</option><option value="context">سياق</option><option value="note">ملاحظة</option></select>
+<button id="wnew" class="primary">صفحة جديدة</button>
+</div>
 <div id="wlist"></div>
+<p id="wquota" hidden></p>
 <article id="wview" hidden>
-<div class="row"><button id="wback">رجوع</button><button id="wedit">تحرير</button></div>
+<div class="row"><button id="wback">رجوع</button><button id="wcopy" class="end">نسخ النص</button><button id="wedit">تحرير</button></div>
 <h2 id="wtitle" dir="auto"></h2>
-<div id="wtags"></div><span id="wmeta" dir="auto"></span>
+<div id="wtags"></div><span id="wmeta"></span>
 <pre id="wbody" dir="auto"></pre>
-<div id="whist" hidden></div>
+<details id="whistbox" hidden><summary>السجل</summary><div id="whist"></div></details>
 </article>
 <div id="wform" hidden>
-<input id="fslug" placeholder="slug: a-z 0-9 - _" autocapitalize="off" spellcheck="false">
-<input id="ftitle" placeholder="العنوان" dir="auto">
-<select id="fkind"><option value="note">ملاحظة</option><option value="skill">مهارة</option><option value="context">سياق</option></select>
-<input id="ftags" placeholder="وسوم مفصولة بفاصلة (حتى 8)" dir="auto">
-<textarea id="fbody" placeholder="النص" dir="auto"></textarea>
-<div class="row"><button id="fsave" class="primary">حفظ</button><button id="fcancel">إلغاء</button></div>
+<div><label for="fslug">المعرّف (slug)</label><input id="fslug" placeholder="a-z 0-9 - _" autocapitalize="off" spellcheck="false" maxlength="64"></div>
+<div><label for="ftitle">العنوان</label><input id="ftitle" maxlength="200" dir="auto"></div>
+<div><label for="fkind">النوع</label><select id="fkind"><option value="note">ملاحظة</option><option value="skill">مهارة</option><option value="context">سياق</option></select></div>
+<div><label for="ftags">وسوم مفصولة بفاصلة (حتى 8)</label><input id="ftags" dir="auto"></div>
+<div><label for="fbody">النص</label><textarea id="fbody" dir="auto"></textarea></div>
+<div class="acts"><button id="fsave" class="primary">حفظ</button><button id="fcancel">إلغاء</button></div>
 </div>
-</section></div>
+</div>
+</section>
+
+<section id="approvals" class="panel" role="tabpanel" aria-labelledby="tab-approvals" hidden>
+<div class="scroll"><p id="aplempty" class="empty">لا توجد مهام بانتظار موافقتك.</p><div id="apl"></div></div>
+</section>
+</div>
+<button id="toast" role="status" hidden></button>
+
 <script nonce="__CSP_NONCE__">
 // All external data is rendered with textContent. Do not build markup from strings here.
-var KEY=sessionStorage.getItem("rk")||"";var after=0;var ME="";var POLL=30000;var tm=null;var AGENTS=[];
+var KEY=sessionStorage.getItem("rk")||"";var ME="";var IS_ADMIN=false;var CAN_CONTEXT=false;
+var TAB="chat";var GEN=0;var after=0;var POLL=30000;var tm=null;var POLLING=false;var AGAIN=false;var SENDING=false;var IDEM=null;
+var SEEN={};var UNREAD=0;var MAX_BUBBLES=500;var PENDING=null;var toastTm=null;var searchTm=null;
+var LOCALE="ar-u-nu-latn";
 var $=function(id){return document.getElementById(id);};
-$("key").value=KEY;
-function save(){KEY=$("key").value;sessionStorage.setItem("rk",KEY);after=0;$("log").replaceChildren();loadAgents();poll();if(!$("wiki").hidden)loadWiki();}
-function fmt(ts){return new Date(ts).toLocaleTimeString("ar",{hour:"2-digit",minute:"2-digit"});}
-function targetLabel(m){return m.to_agent==="__all__"?"الكل":m.to_agent;}
-function sysLine(t){var d=document.createElement("div");d.className="m sys";d.textContent=t;$("log").replaceChildren(d);}
-async function poll(){
-  if(!KEY)return;
-  try{
-    var r=await fetch("/v2/inbox?after="+after,{headers:{Authorization:"Bearer "+KEY}});
-    if(r.status===401){sysLine("مفتاح غير صالح");return;}
-    var d=await r.json();
-    ME=d.agent;POLL=d.suggested_poll_ms||30000;
-    if(d.messages.length){
-      var log=$("log");
-      d.messages.forEach(function(m){
-        var div=document.createElement("div");
-        var mine=(m.from_agent===ME);
-        div.className="m "+(mine?"mine":"other");
-        var h=document.createElement("div");h.className="h";
-        h.textContent=m.from_agent+" ← "+targetLabel(m)+" · "+fmt(m.ts);
-        var b=document.createElement("span");b.textContent=m.body;
-        div.appendChild(h);div.appendChild(b);
-        log.appendChild(div);
-      });
-      after=d.next_after||after;
-      log.scrollTop=log.scrollHeight;
-      fetch("/v2/ack",{method:"POST",headers:{Authorization:"Bearer "+KEY,"Content-Type":"application/json"},body:JSON.stringify({seq:after})});
-    }
-    loadApprovals();
-  }catch(e){}
-  clearTimeout(tm);tm=setTimeout(poll,POLL);
-}
-function renderTask(t){
-  var c=document.createElement("div");c.className="task";
-  var h=document.createElement("div");h.textContent=t.type+" · "+t.from_agent+" ← "+t.to_agent;
-  var p=document.createElement("pre");p.textContent=JSON.stringify(JSON.parse(t.params_json),null,2);
-  var s=document.createElement("div");s.className="sha";s.textContent="sha256: "+t.params_sha256;
-  var ok=document.createElement("button");ok.className="ok";ok.textContent="موافقة";
-  var no=document.createElement("button");no.className="no";no.textContent="رفض";
-  ok.addEventListener("click",function(){if(confirm("موافقة على "+t.type+"؟"))decide(t.id,"approve",{params_sha256:t.params_sha256});});
-  no.addEventListener("click",function(){if(confirm("رفض "+t.type+"؟"))decide(t.id,"reject",{reason:"rejected by admin"});});
-  c.appendChild(h);c.appendChild(p);c.appendChild(s);c.appendChild(ok);c.appendChild(no);
-  return c;
-}
-async function decide(id,action,payload){
-  await fetch("/v2/tasks/"+encodeURIComponent(id)+"/"+action,{method:"POST",headers:{Authorization:"Bearer "+KEY,"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(function(){});
-  loadApprovals();
-}
-async function loadApprovals(){
-  var box=$("approvals");
-  if(ME!=="__admin__"){box.hidden=true;return;}
-  var r=await fetch("/v2/tasks?status=awaiting_approval",{headers:{Authorization:"Bearer "+KEY}}).catch(function(){return null;});
-  if(!r||!r.ok)return;
-  var d=await r.json();
-  $("apl").replaceChildren.apply($("apl"),d.tasks.map(renderTask));
-  box.hidden=!d.tasks.length;
-}
-async function loadAgents(){
-  var r=await fetch("/v2/agents",{headers:{Authorization:"Bearer "+KEY}}).catch(function(){return null;});
-  if(!r||!r.ok)return;
-  var d=await r.json();AGENTS=d.agents.map(function(a){return a.name;});
-  var sel=$("to");sel.replaceChildren();
-  var opts=AGENTS.concat(["__all__"]);
-  opts.forEach(function(n){var o=document.createElement("option");o.value=n;o.textContent=(n==="__all__"?"الكل":n);sel.appendChild(o);});
-}
-async function send(){
-  var t=$("txt").value.trim();if(!t)return;
-  var to=$("to").value;
-  await fetch("/v2/messages",{method:"POST",headers:{Authorization:"Bearer "+KEY,"Content-Type":"application/json"},body:JSON.stringify({to:to,text:t})});
-  $("txt").value="";poll();
-}
-var WK={skill:"مهارة",context:"سياق",note:"ملاحظة"};var PAGE=null;var EDITING=false;var wikiSeq=0;
-function showTab(wiki){
-  $("chat").hidden=wiki;$("wiki").hidden=!wiki;
-  $("tab-chat").className=wiki?"":"on";$("tab-wiki").className=wiki?"on":"";
-  if(wiki){wikiShow("wlist");loadWiki();}
-}
-function wikiShow(id){["wlist","wview","wform"].forEach(function(n){$(n).hidden=n!==id;});$("wbar").hidden=id!=="wlist";wikiMsg("");}
-function wikiMsg(t){$("wmsg").textContent=t;}
-async function wikiApi(method,path,payload){
+var ERRORS={0:"تعذر الاتصال. تحقق من الشبكة وأعد المحاولة.",400:"الطلب غير صالح. راجع ما أدخلته.",401:"المفتاح غير صالح أو أُلغي.",403:"ما عندك صلاحية لهذه العملية.",404:"غير موجود، ربما حُذف.",409:"تغيّرت الحالة في الخادم. حدّث وأعد المحاولة.",413:"الحجم أكبر من المسموح.",415:"النص لا يمكن أن يبدأ بـHTML.",422:"مرفوض: النص يشبه سراً (مفتاح أو توكن). احذفه وأعد المحاولة.",429:"تجاوزت الحد المسموح. انتظر قليلاً ثم أعد المحاولة."};
+function errText(res,over){return (over&&over[res.status])||ERRORS[res.status]||("حدث خطأ غير متوقع ("+res.status+"). أعد المحاولة.");}
+
+// Never rejects, so every caller handles failure the same way.
+async function api(method,path,payload){
   var opts={method:method,headers:{Authorization:"Bearer "+KEY}};
   if(payload){opts.headers["Content-Type"]="application/json";opts.body=JSON.stringify(payload);}
   try{
@@ -168,95 +208,348 @@ async function wikiApi(method,path,payload){
     return {status:r.status,ok:r.ok,data:d};
   }catch(e){return {status:0,ok:false,data:{}};}
 }
-function wikiFail(res){
-  var map={0:"تعذر الاتصال",401:"مفتاح غير صالح",403:"ما عندك صلاحية لهذه العملية",413:"الحجم أو الحصة تجاوزت الحد",415:"النص لا يمكن أن يبدأ بـHTML",422:"مرفوض: النص يشبه سراً. لا تضع أسراراً في الويكي",429:"تجاوزت حد الكتابة، جرّب لاحقاً"};
-  wikiMsg(map[res.status]||res.data.error||("خطأ "+res.status));
+function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
+function bdi(text){var e=document.createElement("bdi");e.textContent=text;return e;}
+function fmtTime(ts){
+  var d=new Date(ts);var now=new Date();var t=d.toLocaleTimeString(LOCALE,{hour:"2-digit",minute:"2-digit"});
+  if(d.toDateString()===now.toDateString())return t;
+  var o={month:"short",day:"numeric"};if(d.getFullYear()!==now.getFullYear())o.year="numeric";
+  return d.toLocaleDateString(LOCALE,o)+" "+t;
 }
-function chip(t,cls){var c=document.createElement("span");c.className=cls||"chip";c.textContent=t;return c;}
-function span(cls,t){var e=document.createElement("span");e.className=cls;e.textContent=t;return e;}
+function fmtBytes(n){return n<1024*1024?Math.round(n/1024)+"KB":(n/1024/1024).toFixed(1)+"MB";}
+function toast(text,onTap){
+  var t=$("toast");t.textContent=text;t.hidden=false;t.onclick=function(){t.hidden=true;if(onTap)onTap();};
+  clearTimeout(toastTm);toastTm=setTimeout(function(){t.hidden=true;},onTap?8000:2500);
+}
+async function copyText(text){
+  try{await navigator.clipboard.writeText(text);toast("تم النسخ");return;}catch(e){}
+  // Some in-app browsers refuse the clipboard API.
+  var a=el("textarea","offscreen");a.value=text;document.body.appendChild(a);a.select();
+  var done=false;try{done=document.execCommand("copy");}catch(e){}
+  a.remove();toast(done?"تم النسخ":"تعذر النسخ");
+}
+
+// ---------- session ----------
+function loginMsg(t){$("login-msg").textContent=t;}
+async function login(){
+  var k=$("key").value.trim();
+  if(!k){loginMsg("أدخل المفتاح أولاً.");return;}
+  KEY=k;var gen=++GEN;$("login").disabled=true;loginMsg("");
+  var res=await api("GET","/v2/me");
+  if(gen!==GEN)return;
+  $("login").disabled=false;
+  if(!res.ok){
+    if(res.status===401)sessionStorage.removeItem("rk");
+    KEY="";loginMsg(errText(res));return;
+  }
+  sessionStorage.setItem("rk",k);$("key").value="";
+  ME=res.data.agent;IS_ADMIN=res.data.is_admin;
+  applyGrants(res.data);
+  $("who").textContent=IS_ADMIN?"الأدمن":ME;
+  $("tab-approvals").hidden=!IS_ADMIN;
+  $("login-view").hidden=true;$("app-view").hidden=false;
+  showTab("chat");poll();
+}
+function logout(msg){
+  GEN++;KEY="";ME="";IS_ADMIN=false;after=0;SEEN={};UNREAD=0;PENDING=null;POLLING=false;AGAIN=false;IDEM=null;
+  clearTimeout(tm);clearTimeout(searchTm);sessionStorage.removeItem("rk");
+  ["log","apl","wlist","to","wbody","wtitle"].forEach(function(id){$(id).replaceChildren();});
+  ["txt","wq","fslug","ftitle","ftags","fbody","key"].forEach(function(id){$(id).value="";});
+  PAGE=null;VERSIONS=null;wikiShow("wlist");chatMsg("");setBadge("chat",0);setBadge("approvals",0);
+  document.title="Agent Relay";$("net").hidden=true;$("toast").hidden=true;
+  $("app-view").hidden=true;$("login-view").hidden=false;loginMsg(msg||"");
+}
+function applyGrants(me){
+  CAN_CONTEXT=me.can_write_context;
+  var sel=$("to");var keep=sel.value;sel.replaceChildren();
+  me.peers.concat(me.can_broadcast?["__all__"]:[]).forEach(function(n){
+    var o=el("option","",n==="__all__"?"الكل":n);o.value=n;sel.appendChild(o);
+    if(n===keep)sel.value=n;
+  });
+  var none=!sel.options.length;sel.disabled=none;$("send").disabled=none;
+  chatMsg(none?"لا يوجد وكيل مسموح لك بمراسلته. اطلب من الأدمن منحك الإذن.":"");
+}
+async function refreshGrants(){
+  var gen=GEN;var res=await api("GET","/v2/me");
+  if(gen===GEN&&res.ok)applyGrants(res.data);
+}
+
+// ---------- tabs ----------
+function setBadge(name,n){var b=$("badge-"+name);b.textContent=n;b.hidden=!n;}
+function showTab(name){
+  TAB=name;
+  ["chat","wiki","approvals"].forEach(function(n){
+    $(n).hidden=n!==name;$("tab-"+n).setAttribute("aria-selected",n===name?"true":"false");
+  });
+  if(name==="chat"){UNREAD=0;setBadge("chat",0);toBottom();}
+  // Coming back to the wiki keeps a page or a half-written draft where it was.
+  if(name==="wiki"&&!$("wlist").hidden)loadWiki();
+  if(name==="approvals")loadApprovals();
+}
+
+// ---------- chat ----------
+function chatMsg(t){$("chatmsg").textContent=t;}
+function toBottom(){var b=$("logbox");b.scrollTop=b.scrollHeight;$("jump").hidden=true;}
+function whoLine(m){
+  var h=el("span","w");
+  var to=m.to_agent==="__all__"?"الكل":m.to_agent;
+  if(m.from_agent===ME){h.append("أنت إلى ",bdi(to));return h;}
+  h.appendChild(bdi(m.from_agent));
+  if(m.to_agent!==ME)h.append(" إلى ",bdi(to));
+  return h;
+}
+function bubble(m){
+  var div=el("div","m "+(m.from_agent===ME?"mine":"other"));
+  var h=el("div","h");
+  var copy=el("button","copy quiet","نسخ");copy.setAttribute("aria-label","نسخ الرسالة");
+  copy.addEventListener("click",function(){copyText(m.body);});
+  h.append(whoLine(m),el("span","t",fmtTime(m.ts)),copy);
+  var b=el("div","b",m.body);b.dir="auto";
+  div.append(h,b);
+  return div;
+}
+function addMessages(list){
+  var box=$("logbox");var log=$("log");
+  var near=box.scrollHeight-box.scrollTop-box.clientHeight<80;var mine=false;var added=0;
+  list.forEach(function(m){
+    if(SEEN[m.seq])return;
+    SEEN[m.seq]=1;log.appendChild(bubble(m));added++;
+    if(m.from_agent===ME)mine=true;else if(TAB!=="chat")UNREAD++;
+  });
+  while(log.children.length>MAX_BUBBLES)log.firstChild.remove();
+  $("logempty").hidden=log.children.length>0;
+  if(!added)return;
+  setBadge("chat",UNREAD);
+  if(TAB==="chat"){if(near||mine)toBottom();else $("jump").hidden=false;}
+}
+async function poll(){
+  if(!KEY)return;
+  if(POLLING){AGAIN=true;return;}
+  var gen=GEN;POLLING=true;AGAIN=false;clearTimeout(tm);
+  var page=IS_ADMIN?200:100;
+  // The admin reads the whole log, because no agent can address the admin directly.
+  var res=await api("GET",IS_ADMIN?"/v2/log?after="+after:"/v2/inbox?sent=1&after="+after);
+  if(gen!==GEN)return;
+  POLLING=false;
+  if(res.status===401){logout("المفتاح لم يعد صالحاً. أدخل مفتاحاً آخر.");return;}
+  $("net").hidden=res.status!==0;
+  var more=false;
+  if(res.ok){
+    var msgs=res.data.messages;
+    POLL=res.data.suggested_poll_ms||30000;
+    if(msgs.length){
+      addMessages(msgs);
+      after=res.data.next_after||after;
+      more=msgs.length>=page;
+      if(!IS_ADMIN&&msgs.some(function(m){return m.from_agent!==ME;}))api("POST","/v2/ack",{seq:after});
+    }
+    if(IS_ADMIN)await loadApprovals();
+    if(gen!==GEN)return;
+  }
+  // A page in the background polls nothing. The visibilitychange handler picks it up again.
+  if(document.hidden&&!AGAIN)return;
+  tm=setTimeout(poll,more||AGAIN?0:POLL);
+}
+var SEND_ERRORS={400:"تعذر الإرسال: تحقق من المستلم والنص.",403:"ما عندك إذن لمراسلة هذا الوكيل.",413:"الرسالة أطول من المسموح (8000 حرف).",429:"تجاوزت حد الإرسال. انتظر قليلاً ثم أعد المحاولة."};
+function newKey(){return window.crypto&&crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random().toString(36).slice(2);}
+async function send(){
+  var t=$("txt").value.trim();var to=$("to").value;
+  if(!t||!to||SENDING)return;
+  var gen=GEN;SENDING=true;$("send").disabled=true;chatMsg("");
+  // The same key on a retry, so a reply lost to the network can't deliver the message twice.
+  if(!IDEM||IDEM.text!==t||IDEM.to!==to)IDEM={text:t,to:to,key:newKey()};
+  var res=await api("POST","/v2/messages",{to:to,text:t,idem_key:IDEM.key});
+  SENDING=false;
+  if(gen!==GEN)return;
+  $("send").disabled=false;
+  if(!res.ok){chatMsg(errText(res,SEND_ERRORS));return;}
+  IDEM=null;$("txt").value="";grow();poll();
+}
+function grow(){var t=$("txt");t.style.height="auto";t.style.height=Math.min(t.scrollHeight+2,132)+"px";}
+
+// ---------- approvals ----------
+var RISK={low:"خطر منخفض",medium:"خطر متوسط",high:"خطر عالٍ"};
+function renderTask(t){
+  var c=el("div","task");
+  var who=el("div","wh");who.append("من ",bdi(t.from_agent)," إلى ",bdi(t.to_agent)," · تنتهي "+fmtTime(t.expires_at));
+  var risk=el("span","chip badge2",RISK[t.risk]||t.risk);
+  var p=el("pre","mono",JSON.stringify(JSON.parse(t.params_json),null,2));
+  var s=el("div","sha mono","sha256: "+t.params_sha256);
+  var msg=el("p","msg");msg.setAttribute("role","alert");
+  var ok=el("button","approve","موافقة");var no=el("button","reject","رفض");
+  var acts=el("div","acts");acts.append(ok,no);
+  var q=el("p","q");q.hidden=true;
+  var yes=el("button");var back=el("button","","تراجع");
+  var sure=el("div","acts");sure.append(yes,back);sure.hidden=true;
+  // Two taps, on the page itself: some in-app browsers silently refuse confirm().
+  var action="";
+  function ask(a){
+    action=a;acts.hidden=true;sure.hidden=false;q.hidden=false;msg.textContent="";
+    q.textContent=(a==="approve"?"تأكيد الموافقة على ":"تأكيد رفض ")+t.type+"؟";
+    yes.className=a==="approve"?"approve":"reject";yes.textContent=a==="approve"?"نعم، موافقة":"نعم، رفض";
+  }
+  function cancel(){acts.hidden=false;sure.hidden=true;q.hidden=true;}
+  ok.addEventListener("click",function(){ask("approve");});
+  no.addEventListener("click",function(){ask("reject");});
+  back.addEventListener("click",cancel);
+  yes.addEventListener("click",async function(){
+    yes.disabled=true;back.disabled=true;
+    var res=await api("POST","/v2/tasks/"+encodeURIComponent(t.id)+"/"+action,action==="approve"?{params_sha256:t.params_sha256}:{reason:"rejected by admin"});
+    yes.disabled=false;back.disabled=false;
+    if(res.ok)toast(action==="approve"?"تمت الموافقة":"تم الرفض");
+    else{cancel();msg.textContent=errText(res,{409:"تعذر التنفيذ: انتهت صلاحية المهمة أو تغيّرت حالتها."});}
+    loadApprovals();
+  });
+  c.append(el("div","ty",t.type),risk,who,p,s,msg,q,acts,sure);
+  return c;
+}
+async function loadApprovals(){
+  if(!IS_ADMIN)return;
+  var gen=GEN;var res=await api("GET","/v2/tasks?status=awaiting_approval");
+  if(gen!==GEN||!res.ok)return;
+  // The hourly alarm closes expired tasks, so one can still be listed after approving it became impossible.
+  var now=Date.now();var tasks=res.data.tasks.filter(function(t){return t.expires_at>now;});
+  var ids=tasks.map(function(t){return t.id;});
+  var known=PENDING||[];
+  var fresh=ids.filter(function(id){return known.indexOf(id)<0;});
+  // Same set means same cards: a redraw would close a confirmation the admin has open.
+  if(fresh.length||ids.length!==known.length){
+    $("apl").replaceChildren.apply($("apl"),tasks.map(renderTask));
+    $("aplempty").hidden=tasks.length>0;
+  }
+  PENDING=ids;
+  setBadge("approvals",ids.length);
+  document.title=ids.length?"("+ids.length+") Agent Relay":"Agent Relay";
+  if(fresh.length&&TAB!=="approvals")toast(fresh.length===1?"مهمة جديدة بانتظار موافقتك. اضغط لفتحها.":fresh.length+" مهام بانتظار موافقتك. اضغط لفتحها.",function(){showTab("approvals");});
+}
+
+// ---------- wiki ----------
+var WK={skill:"مهارة",context:"سياق",note:"ملاحظة"};var PAGE=null;var VERSIONS=null;var EDITING=false;var wikiSeq=0;
+var SLUG_RE=/^[a-z0-9][a-z0-9_-]{0,63}$/;
+function wikiShow(id){
+  ["wlist","wview","wform"].forEach(function(n){$(n).hidden=n!==id;});
+  $("wbar").hidden=id!=="wlist";$("wquota").hidden=true;wikiMsg("");$("wscroll").scrollTop=0;
+}
+function wikiMsg(t,info){$("wmsg").textContent=t;$("wmsg").className=info?"msg info":"msg";}
+var WIKI_ERRORS={400:"راجع الحقول: العنوان حتى 200 حرف، وحتى 8 وسوم بطول 30 حرفاً.",403:"ما عندك صلاحية لتعديل هذا النوع من الصفحات.",413:"الصفحة أكبر من 100KB أو حصة الويكي امتلأت.",422:"مرفوض: النص يشبه سراً. لا تضع أسراراً في الويكي.",429:"تجاوزت حد الكتابة في الساعة. جرّب لاحقاً."};
+function wikiFail(res){wikiMsg(errText(res,WIKI_ERRORS));}
+function chip(t,cls){return el("span",cls||"chip",t);}
 async function loadWiki(){
-  if(!KEY){wikiMsg("أدخل مفتاحك أولاً");return;}
   var seq=++wikiSeq;
-  var res=await wikiApi("GET","/v2/wiki?kind="+encodeURIComponent($("wkind").value)+"&q="+encodeURIComponent($("wq").value));
-  if(seq!==wikiSeq)return;
+  var res=await api("GET","/v2/wiki?kind="+encodeURIComponent($("wkind").value)+"&q="+encodeURIComponent($("wq").value));
+  if(seq!==wikiSeq||!KEY)return;
   if(!res.ok){wikiFail(res);return;}
-  wikiMsg(res.data.pages.length?"":"لا توجد صفحات");
+  wikiMsg(res.data.pages.length?"":"لا توجد صفحات.",true);
   $("wlist").replaceChildren.apply($("wlist"),res.data.pages.map(function(p){
-    var b=document.createElement("button");b.className="wi";
-    b.appendChild(span("t",p.title));
-    b.appendChild(span("d",(WK[p.kind]||p.kind)+" · "+p.slug+" · v"+p.version+(p.tags.length?" · "+p.tags.join("، "):"")));
+    var b=el("button","wi");b.dir="auto";
+    b.appendChild(el("span","t",p.title));
+    b.appendChild(el("span","d",(WK[p.kind]||p.kind)+" · "+p.slug+" · v"+p.version+" · "+fmtTime(p.updated_at)+(p.tags.length?" · "+p.tags.join("، "):"")));
     b.addEventListener("click",function(){openPage(p.slug);});
     return b;
   }));
+  var q=res.data.quota;
+  if(q&&!$("wlist").hidden){$("wquota").textContent=q.pages+" صفحة · "+fmtBytes(q.bytes)+" من "+fmtBytes(q.max_bytes);$("wquota").hidden=false;}
 }
+function pageMeta(version,by,at){return "النسخة "+version+" · "+by+" · "+new Date(at).toLocaleString(LOCALE);}
 function renderPage(p,meta,text){
   $("wtitle").textContent=p.title;
   $("wtags").replaceChildren.apply($("wtags"),[chip(WK[p.kind]||p.kind)].concat(p.tags.map(function(t){return chip(t);})));
+  if(VERSIONS)$("wtags").appendChild(chip(VERSIONS+" نسخة","chip badge2"));
   $("wmeta").textContent=meta;
   $("wbody").textContent=text;
 }
-function pageMeta(version,by,at){return "v"+version+" · "+by+" · "+new Date(at).toLocaleString("ar");}
 async function openPage(slug){
-  var res=await wikiApi("GET","/v2/wiki/"+encodeURIComponent(slug));
+  var res=await api("GET","/v2/wiki/"+encodeURIComponent(slug));
   if(!res.ok){wikiFail(res);return;}
-  PAGE=res.data;wikiShow("wview");
+  PAGE=res.data;VERSIONS=null;wikiShow("wview");
   renderPage(PAGE,pageMeta(PAGE.version,PAGE.updated_by,PAGE.updated_at),PAGE.body);
-  $("whist").hidden=true;
-  if(ME==="__admin__")loadHistory(PAGE);
+  // Without the grant the server refuses the save, so don't let anyone write a long edit first.
+  $("wedit").hidden=PAGE.kind==="context"&&!CAN_CONTEXT;
+  $("whistbox").hidden=true;$("whistbox").open=false;
+  if(IS_ADMIN)loadHistory(PAGE);
 }
 async function loadHistory(p){
-  var res=await wikiApi("GET","/v2/wiki/"+encodeURIComponent(p.slug)+"/history");
+  var res=await api("GET","/v2/wiki/"+encodeURIComponent(p.slug)+"/history");
   if(!res.ok||!PAGE||PAGE.slug!==p.slug)return;
-  $("wtags").appendChild(chip((res.data.total+1)+" نسخة","chip badge"));
-  var cur=document.createElement("button");cur.className="wi";cur.textContent="v"+p.version+" (الحالية)";
-  cur.addEventListener("click",function(){renderPage(p,pageMeta(p.version,p.updated_by,p.updated_at),p.body);wikiMsg("");$("wtags").appendChild(chip((res.data.total+1)+" نسخة","chip badge"));});
+  VERSIONS=res.data.total+1;
+  $("wtags").appendChild(chip(VERSIONS+" نسخة","chip badge2"));
+  var cur=el("button","","v"+p.version+" (الحالية)");
+  cur.addEventListener("click",function(){renderPage(p,pageMeta(p.version,p.updated_by,p.updated_at),p.body);wikiMsg("");});
   $("whist").replaceChildren.apply($("whist"),[cur].concat(res.data.versions.map(function(v){
-    var b=document.createElement("button");b.className="wi";
-    b.textContent="v"+v.version+" · "+v.updated_by+" · "+new Date(v.updated_at).toLocaleString("ar")+" · "+(v.deleted?"حذف":v.size+" بايت");
+    var b=el("button","","v"+v.version+" · "+v.updated_by+" · "+new Date(v.updated_at).toLocaleString(LOCALE)+" · "+(v.deleted?"حذف":fmtBytes(v.size)));
     b.disabled=v.deleted;
     if(!v.deleted)b.addEventListener("click",function(){showVersion(p,v.version);});
     return b;
   })));
-  $("whist").hidden=false;
+  $("whistbox").hidden=false;
 }
 async function showVersion(p,version){
-  var res=await wikiApi("GET","/v2/wiki/"+encodeURIComponent(p.slug)+"/history/"+version);
+  var res=await api("GET","/v2/wiki/"+encodeURIComponent(p.slug)+"/history/"+version);
   if(!res.ok){wikiFail(res);return;}
   $("wmeta").textContent=pageMeta(version,res.data.updated_by,res.data.updated_at);
   $("wbody").textContent=res.data.body;
-  wikiMsg("تعرض نسخة قديمة. التحرير يبدأ دائماً من النسخة الحالية.");
+  wikiMsg("تعرض نسخة قديمة. التحرير يبدأ دائماً من النسخة الحالية.",true);
+  $("wscroll").scrollTop=0;
 }
 function openForm(p){
   EDITING=!!p;wikiShow("wform");
   $("fslug").value=p?p.slug:"";$("fslug").disabled=!!p;
   $("ftitle").value=p?p.title:"";$("fkind").value=p?p.kind:"note";
   $("ftags").value=p?p.tags.join(", "):"";$("fbody").value=p?p.body:"";
+  $("fkind").querySelector('option[value="context"]').disabled=!CAN_CONTEXT;
 }
 async function saveWiki(){
-  var slug=$("fslug").value.trim();
-  if(!slug){wikiMsg("الـslug مطلوب");return;}
-  var path="/v2/wiki/"+encodeURIComponent(slug);
-  // PUT overwrites, so a new page must not silently land on a slug that is already taken.
-  if(!EDITING){
-    var seen=await wikiApi("GET",path);
-    if(seen.ok){wikiMsg("هذا الـslug مستخدم. افتح الصفحة وحرّرها.");return;}
+  var slug=$("fslug").value.trim();var title=$("ftitle").value.trim();var text=$("fbody").value;
+  var tags=$("ftags").value.split(/[,،]/).map(function(t){return t.trim();}).filter(Boolean);
+  if(!SLUG_RE.test(slug)){wikiMsg("المعرّف يبدأ بحرف إنجليزي صغير أو رقم، وفيه فقط a-z و0-9 و- و_.");return;}
+  if(!title){wikiMsg("العنوان مطلوب.");return;}
+  if(!text.trim()){wikiMsg("النص مطلوب.");return;}
+  if(tags.length>8){wikiMsg("الحد 8 وسوم.");return;}
+  $("fsave").disabled=true;wikiMsg("");
+  // if_version makes the server refuse instead of replacing a page someone else just wrote.
+  var res=await api("PUT","/v2/wiki/"+encodeURIComponent(slug),{title:title,kind:$("fkind").value,body:text,tags:tags,if_version:EDITING?PAGE.version:0});
+  $("fsave").disabled=false;
+  if(res.status===409){
+    wikiMsg(EDITING?"تغيّرت الصفحة أثناء تحريرك. انسخ نصك، ثم ارجع وافتحها من جديد.":"هذا المعرّف مستخدم. افتح الصفحة وحرّرها، أو اختر معرّفاً آخر.");
+    return;
   }
-  var res=await wikiApi("PUT",path,{title:$("ftitle").value,kind:$("fkind").value,body:$("fbody").value,
-    tags:$("ftags").value.split(",").map(function(t){return t.trim();}).filter(Boolean)});
   if(!res.ok){wikiFail(res);return;}
   await openPage(slug);
 }
-$("tab-chat").addEventListener("click",function(){showTab(false);});
-$("tab-wiki").addEventListener("click",function(){showTab(true);});
+
+// ---------- wiring ----------
+$("login").addEventListener("click",login);
+$("key").addEventListener("keydown",function(e){if(e.key==="Enter")login();});
+$("logout").addEventListener("click",function(){logout();});
+["chat","wiki","approvals"].forEach(function(n){$("tab-"+n).addEventListener("click",function(){showTab(n);});});
+$("send").addEventListener("click",send);
+// Keeps the keyboard open when the send button is tapped.
+$("send").addEventListener("pointerdown",function(e){e.preventDefault();});
+$("jump").addEventListener("click",toBottom);
+$("logbox").addEventListener("scroll",function(){var b=$("logbox");if(b.scrollHeight-b.scrollTop-b.clientHeight<80)$("jump").hidden=true;});
+$("txt").addEventListener("input",grow);
+// With a mouse and keyboard Enter sends. On a touch keyboard it adds a line, and the button sends.
+var FINE=!!(window.matchMedia&&matchMedia("(pointer:fine)").matches);
+$("txt").addEventListener("keydown",function(e){if(FINE&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();send();}});
 $("wkind").addEventListener("change",loadWiki);
-$("wq").addEventListener("keydown",function(e){if(e.key==="Enter")loadWiki();});
+$("wq").addEventListener("input",function(){clearTimeout(searchTm);searchTm=setTimeout(loadWiki,350);});
+$("wq").addEventListener("keydown",function(e){if(e.key==="Enter"){clearTimeout(searchTm);loadWiki();}});
 $("wnew").addEventListener("click",function(){openForm(null);});
 $("wback").addEventListener("click",function(){wikiShow("wlist");loadWiki();});
 $("wedit").addEventListener("click",function(){if(PAGE)openForm(PAGE);});
+$("wcopy").addEventListener("click",function(){copyText($("wbody").textContent);});
 $("fsave").addEventListener("click",saveWiki);
 $("fcancel").addEventListener("click",function(){if(EDITING&&PAGE)openPage(PAGE.slug);else{wikiShow("wlist");loadWiki();}});
-$("login").addEventListener("click",save);
-$("send").addEventListener("click",send);
-$("txt").addEventListener("keydown",function(e){if(e.key==="Enter")send();});
-loadAgents();poll();
+document.addEventListener("visibilitychange",function(){if(!document.hidden&&KEY&&ME){refreshGrants();poll();}});
+window.addEventListener("online",function(){if(KEY&&ME)poll();});
+// iOS Safari keeps the layout viewport when the keyboard opens, so the page follows the visual one instead.
+if(window.visualViewport){
+  var fitViewport=function(){
+    var v=window.visualViewport;if(v.scale>1.01)return;
+    document.documentElement.style.setProperty("--app-h",v.height+"px");window.scrollTo(0,0);
+  };
+  window.visualViewport.addEventListener("resize",fitViewport);
+  window.visualViewport.addEventListener("scroll",fitViewport);
+}
+if(KEY){$("key").value=KEY;login();}
 </script></body></html>
