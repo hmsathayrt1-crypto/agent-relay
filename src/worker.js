@@ -656,9 +656,16 @@ export default {
     }
 
     if (url.pathname.startsWith('/v2/')) {
-      // Reject before waking the Durable Object. The DO re-checks actual bytes for chunked bodies.
+      // Buffer under the cap here, before waking the Durable Object. Leaving a stream half read across
+      // the DO boundary throws in the runtime ("Can't read from request stream after response has been sent").
       const limit = url.pathname.endsWith('/content') ? MAX_FILE : MAX_JSON;
-      if (Number(request.headers.get('Content-Length') || 0) > limit) return j({ error: 'request body too large', max: limit }, 413);
+      if (request.body) {
+        const raw = await readCapped(request, limit);
+        if (raw === null) return j({ error: 'request body too large', max: limit }, 413);
+        const headers = new Headers(request.headers);
+        headers.delete('Transfer-Encoding');
+        request = new Request(request.url, { method: request.method, headers, body: raw });
+      }
       const id = env.RELAY_DO.idFromName('hub');
       return env.RELAY_DO.get(id).fetch(request);
     }
