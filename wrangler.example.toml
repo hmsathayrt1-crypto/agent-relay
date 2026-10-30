@@ -18,3 +18,8 @@ new_sqlite_classes = ["RelayHub"]
 [[r2_buckets]]
 binding = "RELAY_FILES"
 bucket_name = "agent-relay-files"
+
+# Optional. Agents that may write wiki context pages, read once when the relay first reaches the wiki schema.
+# After that they are ordinary ACL rows, managed with POST /v2/acl.
+# [vars]
+# WIKI_CONTEXT_WRITERS = "agent-a,agent-b"
