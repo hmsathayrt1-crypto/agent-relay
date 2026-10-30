@@ -43,9 +43,9 @@ async function readCapped(request, max) {
 }
 
 // Returns the parsed object, or a Response to send back.
-async function readJson(request) {
-  const raw = await readCapped(request, MAX_JSON);
-  if (raw === null) return j({ error: 'request body too large', max: MAX_JSON }, 413);
+async function readJson(request, max = MAX_JSON) {
+  const raw = await readCapped(request, max);
+  if (raw === null) return j({ error: 'request body too large', max }, 413);
   if (!raw.byteLength) return {};
   try {
     const v = JSON.parse(new TextDecoder().decode(raw));
@@ -69,8 +69,34 @@ const GITHUB_INVITE_SCHEMA = {
   },
 };
 
+const MAX_WIKI_BODY = 100 * 1024;
+// A full body can triple in the request once JSON-escaped: clients that escape non-ASCII send \uXXXX for each 2-byte Arabic letter.
+const MAX_WIKI_REQUEST = 3 * MAX_WIKI_BODY + 4096;
+const MAX_WIKI_PAGES = 200;
+const MAX_WIKI_BYTES = 5 * 1024 * 1024;
+const WIKI_RATE_MAX = 60;
+const WIKI_HISTORY_KEEP = 20;
+const WIKI_TOMBSTONE_MS = 14 * 86400 * 1000;
+const WIKI_KINDS = ['skill', 'context', 'note'];
+const WIKI_SLUG_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const WIKI_HTML_RE = /^\s*(?:<!doctype|<html|<script)/i;
+// Context writers are ordinary ACL rows: (agent, WIKI_ACL_TO, 'wiki:context'). The name is reserved so no agent can hold it.
+const WIKI_ACL_TO = '__wiki__';
+const RESERVED_NAMES = ['__admin__', '__all__', WIKI_ACL_TO];
+
 const hasSecret = (s) => SECRET_PATTERNS.some(p => p.test(s));
-const aclKindOk = (k) => ['msg', 'file', 'broadcast'].includes(k) || /^task:[a-z0-9_.-]{1,64}$/.test(String(k));
+const byteLen = (s) => new TextEncoder().encode(s).length;
+const cleanLine = (s) => s.replace(/[\u0000-\u001f\u202e]/g, '').trim();
+const aclOk = (to, k) => k === 'wiki:context' ? to === WIKI_ACL_TO : ['msg', 'file', 'broadcast'].includes(k) || /^task:[a-z0-9_.-]{1,64}$/.test(String(k));
+const isFileContent = (path) => /^\/v2\/files\/[a-z0-9]+\/content$/.test(path);
+const jsonCap = (path, method) => method === 'PUT' && path.startsWith('/v2/wiki/') ? MAX_WIKI_REQUEST : MAX_JSON;
+
+// Returns the normalized list, or null if it breaks the limits.
+function wikiTags(tags) {
+  if (!Array.isArray(tags) || tags.length > 8 || tags.some(t => typeof t !== 'string')) return null;
+  const out = [...new Set(tags.map(t => cleanLine(t).toLowerCase()))];
+  return out.every(t => t && t.length <= 30) ? out : null;
+}
 
 // JSON-Schema subset. Errors name paths, never values, so they are safe to return and store.
 function validate(schema, v, path = '$', errs = []) {
@@ -117,6 +143,7 @@ export class RelayHub {
     this.env = env;
     this.sql = state.storage.sql;
     this.leaseMs = Number(env.LEASE_MS) || LEASE_MS;
+    this.wikiTombstoneMs = Number(env.WIKI_TOMBSTONE_MS) || WIKI_TOMBSTONE_MS;
     state.blockConcurrencyWhile(async () => {
       this._migrate();
       if (await state.storage.getAlarm() === null) await state.storage.setAlarm(Date.now() + 60_000);
@@ -128,6 +155,21 @@ export class RelayHub {
     try { v = this.sql.exec("SELECT value FROM meta WHERE key='schema_version'").toArray()[0]; } catch (e) {}
     if (!v) this._migrateV1();
     if (!v || Number(v.value) < 2) this.state.storage.transactionSync(() => this._migrateV2());
+    if (!v || Number(v.value) < 3) this.state.storage.transactionSync(() => this._migrateV3());
+  }
+
+  _migrateV3() {
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS wiki(slug TEXT PRIMARY KEY, title TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'note', body TEXT NOT NULL, tags TEXT DEFAULT '[]', version INTEGER NOT NULL DEFAULT 1, updated_by TEXT NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS wiki_history(slug TEXT, version INTEGER, body TEXT, updated_by TEXT, updated_at INTEGER, PRIMARY KEY(slug, version));
+      CREATE INDEX IF NOT EXISTS wiki_kind ON wiki(kind);
+      INSERT OR IGNORE INTO meta(key, value) VALUES('wiki_pages','0'), ('wiki_bytes','0');
+    `);
+    // Lets an upgrade name its context writers without the admin key. After this they are plain ACL rows.
+    for (const name of String(this.env.WIKI_CONTEXT_WRITERS || '').split(',').map(s => s.trim())) {
+      if (NAME_RE.test(name) && !RESERVED_NAMES.includes(name)) this.sql.exec("INSERT OR IGNORE INTO acl(from_agent,to_agent,kind) VALUES(?,?,'wiki:context')", name, WIKI_ACL_TO);
+    }
+    this.sql.exec("UPDATE meta SET value='3' WHERE key='schema_version'");
   }
 
   _migrateV2() {
@@ -377,6 +419,151 @@ export class RelayHub {
     return null;
   }
 
+  _wikiCount(pages, bytes) {
+    this.sql.exec("UPDATE meta SET value=CAST(value AS INTEGER)+? WHERE key='wiki_pages'", pages);
+    this.sql.exec("UPDATE meta SET value=CAST(value AS INTEGER)+? WHERE key='wiki_bytes'", bytes);
+  }
+
+  _wikiQuota() {
+    const m = Object.fromEntries(this.sql.exec("SELECT key, value FROM meta WHERE key IN ('wiki_pages','wiki_bytes')").toArray().map(r => [r.key, Number(r.value)]));
+    return { pages: m.wiki_pages, bytes: m.wiki_bytes, max_pages: MAX_WIKI_PAGES, max_bytes: MAX_WIKI_BYTES };
+  }
+
+  _wikiArchive(p) {
+    this.sql.exec("INSERT INTO wiki_history(slug, version, body, updated_by, updated_at) VALUES(?,?,?,?,?)", p.slug, p.version, p.body, p.updated_by, p.updated_at);
+  }
+
+  _wikiPrune(slug) {
+    const gone = this.sql.exec("DELETE FROM wiki_history WHERE slug=? AND version NOT IN (SELECT version FROM wiki_history WHERE slug=? ORDER BY version DESC LIMIT ?) RETURNING COALESCE(length(CAST(body AS BLOB)),0) AS size", slug, slug, WIKI_HISTORY_KEEP).toArray();
+    this._wikiCount(0, -gone.reduce((n, r) => n + r.size, 0));
+  }
+
+  // A deleted page keeps its history until here, so a bad delete can be undone. Those bytes count against the quota meanwhile.
+  _sweepWiki(now) {
+    const dead = this.sql.exec("SELECT slug, SUM(COALESCE(length(CAST(body AS BLOB)),0)) AS size FROM wiki_history WHERE slug NOT IN (SELECT slug FROM wiki) GROUP BY slug HAVING MAX(updated_at) < ?", now - this.wikiTombstoneMs).toArray();
+    for (const d of dead) this.state.storage.transactionSync(() => {
+      this.sql.exec("DELETE FROM wiki_history WHERE slug=?", d.slug);
+      this._wikiCount(0, -d.size);
+    });
+  }
+
+  _canWriteContext(me, isAdmin) {
+    return isAdmin || !!this.sql.exec("SELECT 1 FROM acl WHERE from_agent=? AND to_agent=? AND kind='wiki:context'", me, WIKI_ACL_TO).toArray()[0];
+  }
+
+  _wiki(url, path, method, me, isAdmin, body) {
+    const q = url.searchParams;
+    if (path === '/v2/wiki') {
+      if (method !== 'GET') return null;
+      const where = [], args = [];
+      const kind = q.get('kind');
+      if (kind) {
+        if (!WIKI_KINDS.includes(kind)) return j({ error: 'invalid kind' }, 400);
+        where.push('kind=?'); args.push(kind);
+      }
+      const term = (q.get('q') || '').trim();
+      if (term.length > 200) return j({ error: 'q too long', max: 200 }, 400);
+      if (term) {
+        const like = '%' + term.replace(/[\\%_]/g, '\\$&') + '%';
+        where.push("(title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\')"); args.push(like, like);
+      }
+      const tag = cleanLine(q.get('tag') || '').toLowerCase();
+      if (tag) { where.push("EXISTS (SELECT 1 FROM json_each(wiki.tags) WHERE value=?)"); args.push(tag); }
+      const rows = this.sql.exec("SELECT slug, title, kind, tags, version, updated_by, updated_at, length(CAST(body AS BLOB)) AS size FROM wiki" + (where.length ? " WHERE " + where.join(' AND ') : "") + " ORDER BY updated_at DESC LIMIT ?", ...args, MAX_WIKI_PAGES).toArray();
+      return j({ pages: rows.map(r => ({ ...r, tags: JSON.parse(r.tags) })), quota: this._wikiQuota() });
+    }
+
+    const m = path.match(/^\/v2\/wiki\/([^/]+)(\/history(?:\/([^/]+))?)?$/);
+    if (!m) return null;
+    const slug = m[1];
+    if (!WIKI_SLUG_RE.test(slug)) return j({ error: 'invalid slug' }, 400);
+    const cur = this.sql.exec("SELECT * FROM wiki WHERE slug=?", slug).toArray()[0];
+
+    if (m[2]) {
+      if (method !== 'GET') return null;
+      if (m[3] !== undefined) {
+        if (!/^[1-9][0-9]{0,9}$/.test(m[3])) return j({ error: 'invalid version' }, 400);
+        const h = this.sql.exec("SELECT version, body, updated_by, updated_at FROM wiki_history WHERE slug=? AND version=? AND body IS NOT NULL", slug, Number(m[3])).toArray()[0];
+        return h ? j({ slug, ...h }) : j({ error: 'not found' }, 404);
+      }
+      const total = this.sql.exec("SELECT COUNT(*) AS n FROM wiki_history WHERE slug=?", slug).toArray()[0].n;
+      if (!cur && !total) return j({ error: 'not found' }, 404);
+      const versions = this.sql.exec("SELECT version, updated_by, updated_at, COALESCE(length(CAST(body AS BLOB)),0) AS size, body IS NULL AS deleted FROM wiki_history WHERE slug=? ORDER BY version DESC LIMIT ?", slug, WIKI_HISTORY_KEEP).toArray();
+      return j({ slug, current_version: cur ? cur.version : null, total, versions: versions.map(v => ({ ...v, deleted: !!v.deleted })) });
+    }
+
+    if (method === 'GET') {
+      if (!cur) return j({ error: 'not found' }, 404);
+      const { slug: s, title, kind, body: text, tags, version, updated_by, updated_at } = cur;
+      return j({ slug: s, title, kind, body: text, tags: JSON.parse(tags), version, updated_by, updated_at });
+    }
+
+    if (method === 'PUT') {
+      const text = body.body;
+      if (typeof text !== 'string' || !text.trim() || text.includes('\u0000')) return j({ error: 'body must be non-empty text' }, 400);
+      const size = byteLen(text);
+      if (size > MAX_WIKI_BODY) return j({ error: 'body too large', max: MAX_WIKI_BODY }, 413);
+      if (WIKI_HTML_RE.test(text)) return j({ error: 'content type not allowed: body is shown as text, not HTML' }, 415);
+      const rawTitle = body.title === undefined && cur ? cur.title : body.title;
+      if (typeof rawTitle !== 'string' || !cleanLine(rawTitle) || rawTitle.length > 200) return j({ error: 'title required, up to 200 characters' }, 400);
+      const title = cleanLine(rawTitle);
+      const kind = body.kind === undefined ? (cur ? cur.kind : 'note') : body.kind;
+      if (!WIKI_KINDS.includes(kind)) return j({ error: 'invalid kind' }, 400);
+      const tags = wikiTags(body.tags === undefined ? (cur ? JSON.parse(cur.tags) : []) : body.tags);
+      if (!tags) return j({ error: 'tags must be up to 8 strings of up to 30 characters' }, 400);
+      const tags_json = JSON.stringify(tags);
+      // Checking both kinds stops anyone from rewriting a context page by relabelling it as a note.
+      if ((kind === 'context' || (cur && cur.kind === 'context')) && !this._canWriteContext(me, isAdmin)) return j({ error: 'context pages need the admin or the wiki:context grant' }, 403);
+      if ([slug, title, tags_json, text].some(hasSecret) || (this.env.ADMIN_KEY && [title, tags_json, text].some(s => s.includes(this.env.ADMIN_KEY))))
+        return j({ error: 'rejected: looks like a secret — pass a reference instead' }, 422);
+      // A retry of a write that already landed adds no version, burns no quota and does not take over the page.
+      if (cur && cur.body === text && cur.title === title && cur.kind === kind && cur.tags === tags_json) return j({ ok: true, slug, version: cur.version, kind, unchanged: true });
+      const quota = this._wikiQuota();
+      if (!cur && quota.pages >= MAX_WIKI_PAGES) return j({ error: 'wiki page limit reached', max: MAX_WIKI_PAGES }, 413);
+      if (quota.bytes + size > MAX_WIKI_BYTES) return j({ error: 'wiki storage quota reached', max: MAX_WIKI_BYTES, bytes: quota.bytes }, 413);
+      if (!isAdmin && !this._bump('wiki:' + me, 3600 * 1000, WIKI_RATE_MAX)) return j({ error: 'rate limit: too many wiki writes', max: WIKI_RATE_MAX }, 429);
+      // A deleted slug keeps counting up, so old history rows are never overwritten.
+      const version = (cur ? cur.version : this.sql.exec("SELECT COALESCE(MAX(version),0) AS m FROM wiki_history WHERE slug=?", slug).toArray()[0].m) + 1;
+      const updated_at = Date.now();
+      this.state.storage.transactionSync(() => {
+        if (cur) this._wikiArchive(cur);
+        this.sql.exec("INSERT INTO wiki(slug, title, kind, body, tags, version, updated_by, updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(slug) DO UPDATE SET title=excluded.title, kind=excluded.kind, body=excluded.body, tags=excluded.tags, version=excluded.version, updated_by=excluded.updated_by, updated_at=excluded.updated_at",
+          slug, title, kind, text, tags_json, version, me, updated_at);
+        this._wikiCount(cur ? 0 : 1, size);
+        this._wikiPrune(slug);
+      });
+      return j({ ok: true, slug, version, kind, updated_by: me, updated_at });
+    }
+
+    if (method === 'DELETE') {
+      if (q.get('purge') === '1') {
+        if (!isAdmin) return j({ error: 'admin only' }, 403);
+        const h = this.sql.exec("SELECT COUNT(*) AS n, SUM(COALESCE(length(CAST(body AS BLOB)),0)) AS size FROM wiki_history WHERE slug=?", slug).toArray()[0];
+        if (!cur && !h.n) return j({ error: 'not found' }, 404);
+        this.state.storage.transactionSync(() => {
+          this.sql.exec("DELETE FROM wiki WHERE slug=?", slug);
+          this.sql.exec("DELETE FROM wiki_history WHERE slug=?", slug);
+          this._wikiCount(cur ? -1 : 0, -((h.size || 0) + (cur ? byteLen(cur.body) : 0)));
+        });
+        return j({ ok: true, slug, purged: true });
+      }
+      if (!cur) return j({ error: 'not found' }, 404);
+      if (!isAdmin && cur.updated_by !== me) return j({ error: 'only the last editor or the admin may delete' }, 403);
+      if (cur.kind === 'context' && !this._canWriteContext(me, isAdmin)) return j({ error: 'context pages need the admin or the wiki:context grant' }, 403);
+      // Not rate limited: an agent can only delete what it wrote last, and those writes were already counted.
+      const version = cur.version + 1;
+      this.state.storage.transactionSync(() => {
+        this._wikiArchive(cur);
+        this._wikiArchive({ slug, version, body: null, updated_by: me, updated_at: Date.now() });
+        this.sql.exec("DELETE FROM wiki WHERE slug=?", slug);
+        this._wikiCount(-1, 0);
+        this._wikiPrune(slug);
+      });
+      return j({ ok: true, slug, deleted: true, version });
+    }
+    return null;
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -388,8 +575,8 @@ export class RelayHub {
     this.sql.exec("UPDATE agents SET last_seen=? WHERE name=?", Date.now(), me);
     const isAdmin = me === '__admin__';
     let body = {};
-    if ((method === 'POST' || method === 'PUT') && !path.endsWith('/content')) {
-      body = await readJson(request);
+    if ((method === 'POST' || method === 'PUT') && !isFileContent(path)) {
+      body = await readJson(request, jsonCap(path, method));
       if (body instanceof Response) return body;
     }
 
@@ -397,7 +584,7 @@ export class RelayHub {
       // ---------- admin ----------
       if (path === '/v2/join' && isAdmin && method === 'POST') {
         const name = String(body.agent || '').trim().toLowerCase();
-        if (!NAME_RE.test(name) || name === '__admin__' || name === '__all__') return j({ error: 'invalid agent name' }, 400);
+        if (!NAME_RE.test(name) || RESERVED_NAMES.includes(name)) return j({ error: 'invalid agent name' }, 400);
         if (this.sql.exec("SELECT 1 FROM agents WHERE name=?", name).toArray()[0]) return j({ error: 'agent exists' }, 409);
         const key = 'ark_' + crypto.randomUUID().replace(/-/g, '');
         this.sql.exec("INSERT INTO agents(name, key_hash, created_at) VALUES(?,?,?)", name, await sha256hex(key), Date.now());
@@ -406,12 +593,12 @@ export class RelayHub {
       if (path === '/v2/invites' && method === 'POST') {
         if (!isAdmin) return j({ error: 'admin only' }, 403);
         const name = String(body.agent || '').trim().toLowerCase();
-        if (!NAME_RE.test(name) || name === '__admin__' || name === '__all__') return j({ error: 'invalid agent name' }, 400);
+        if (!NAME_RE.test(name) || RESERVED_NAMES.includes(name)) return j({ error: 'invalid agent name' }, 400);
         if (this.sql.exec("SELECT 1 FROM agents WHERE name=?", name).toArray()[0]) return j({ error: 'agent exists' }, 409);
         const template = body.acl_template === undefined ? [] : body.acl_template;
         if (!Array.isArray(template) || template.length > 50) return j({ error: 'acl_template must be a list' }, 400);
         for (const a of template) {
-          if (!a || !NAME_RE.test(String(a.from)) || !NAME_RE.test(String(a.to)) || !aclKindOk(a.kind) || (a.from !== name && a.to !== name))
+          if (!a || !NAME_RE.test(String(a.from)) || !NAME_RE.test(String(a.to)) || !aclOk(a.to, a.kind) || (a.from !== name && a.to !== name))
             return j({ error: 'each acl_template entry needs from, to, kind and must involve ' + name }, 400);
         }
         const ttl = body.ttl_s === undefined ? 3600 : Number(body.ttl_s);
@@ -428,7 +615,7 @@ export class RelayHub {
       }
       if (path === '/v2/acl' && isAdmin && method === 'POST') {
         const { from, to, kind, allow } = body;
-        if (!NAME_RE.test(String(from)) || !NAME_RE.test(String(to)) || !aclKindOk(kind))
+        if (!NAME_RE.test(String(from)) || !NAME_RE.test(String(to)) || !aclOk(to, kind))
           return j({ error: 'invalid acl args' }, 400);
         if (allow === false) this.sql.exec("DELETE FROM acl WHERE from_agent=? AND to_agent=? AND kind=?", from, to, kind);
         else this.sql.exec("INSERT OR IGNORE INTO acl(from_agent,to_agent,kind) VALUES(?,?,?)", from, to, kind);
@@ -608,6 +795,11 @@ export class RelayHub {
         if (res) return res;
       }
 
+      if (path === '/v2/wiki' || path.startsWith('/v2/wiki/')) {
+        const res = this._wiki(url, path, method, me, isAdmin, body);
+        if (res) return res;
+      }
+
       return j({ error: 'not found' }, 404);
     } catch (e) {
       // Never log the request or the error message: either could carry message content.
@@ -619,6 +811,7 @@ export class RelayHub {
   async alarm() {
     const now = Date.now();
     this._sweepTasks(now);
+    this._sweepWiki(now);
     const expired = this.sql.exec("SELECT id, r2_key FROM files WHERE expires_at < ? OR (status='pending' AND created_at < ?)", now, now - 3600 * 1000).toArray();
     for (const f of expired) {
       await this.env.RELAY_FILES.delete(f.r2_key);
@@ -658,7 +851,7 @@ export default {
     if (url.pathname.startsWith('/v2/')) {
       // Buffer under the cap here, before waking the Durable Object. Leaving a stream half read across
       // the DO boundary throws in the runtime ("Can't read from request stream after response has been sent").
-      const limit = url.pathname.endsWith('/content') ? MAX_FILE : MAX_JSON;
+      const limit = isFileContent(url.pathname) ? MAX_FILE : jsonCap(url.pathname, request.method);
       if (request.body) {
         const raw = await readCapped(request, limit);
         if (raw === null) return j({ error: 'request body too large', max: limit }, 413);
