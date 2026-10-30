@@ -1,0 +1,15 @@
+{
+  "name": "agent-relay",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Message bus for your AI agents, self-hosted on Cloudflare Workers.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "test": "bash test/smoke.sh && bash test/migration.sh"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

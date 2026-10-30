@@ -1,0 +1,20 @@
+# Copy to wrangler.toml, which is gitignored, then edit for your account.
+name = "agent-relay"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+rules = [
+  { type = "Text", globs = ["**/*.html"], fallthrough = true }
+]
+
+[[durable_objects.bindings]]
+name = "RELAY_DO"
+class_name = "RelayHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelayHub"]
+
+[[r2_buckets]]
+binding = "RELAY_FILES"
+bucket_name = "agent-relay-files"
