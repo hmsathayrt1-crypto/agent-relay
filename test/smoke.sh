@@ -211,8 +211,184 @@ expect "template grants exactly its ACL" 200 POST /v2/messages "$TK" '{"to":"bob
 expect "  and nothing else" 403 POST /v2/messages "$TK" '{"to":"alice","text":"hi"}'
 expect "short-lived invite" 200 POST /v2/invites "$ADMIN" '{"agent":"late1","ttl_s":1}'; CODE3=$(field .invite_code); sleep 2
 expect "expired invite is 401" 401 POST /v2/join '' "{\"invite_code\":\"$CODE3\"}"
+expect "invite template can grant wiki:context" 200 POST /v2/invites "$ADMIN" '{"agent":"ctxbot","acl_template":[{"from":"ctxbot","to":"__wiki__","kind":"wiki:context"}]}'; CODE4=$(field .invite_code)
+api POST /v2/join '' "{\"invite_code\":\"$CODE4\"}"; CTXK=$(field .key)
+expect "  and it works" 200 PUT /v2/wiki/invited-ctx "$CTXK" '{"title":"t","kind":"context","body":"from an invite"}'
+expect "invite template cannot point wiki:context elsewhere" 400 POST /v2/invites "$ADMIN" '{"agent":"ctxbot2","acl_template":[{"from":"ctxbot2","to":"bob","kind":"wiki:context"}]}'
 jc=''; for i in $(seq 1 12); do api POST /v2/join '' '{"invite_code":"inv_guess"}'; jc=$code; [ "$code" = 429 ] && break; done
 eq "join attempts are throttled" "$jc" 429
+
+echo "== wiki: create, update, versions"
+page() { jq -cn --arg title "$1" --arg kind "$2" --arg body "$3" --argjson tags "${4:-[]}" '{title:$title,kind:$kind,body:$body,tags:$tags}'; }
+expect "wiki needs a key" 401 GET /v2/wiki ''
+expect "wiki rejects a bad key" 401 PUT /v2/wiki/x 'ark_wrong' "$(page t note b)"
+for bad in Upper -dash _under "$(head -c 65 /dev/zero | tr '\0' a)" "$(uri 'مهام')"; do
+  expect "slug [${bad:0:12}] is 400" 400 PUT "/v2/wiki/$bad" "$A" "$(page t note b)"
+done
+expect "unknown page is 404" 404 GET /v2/wiki/nope "$A"
+expect "create a note" 200 PUT /v2/wiki/tasks-guide "$A" "$(page 'دليل المهام' note 'كيف تستخدم المهام في القناة' '["Ops","ops"," Daily "]')"; eq "  starts at version 1" "$(field .version)" 1
+expect "any active agent reads it" 200 GET /v2/wiki/tasks-guide "$C"
+eq "  title" "$(field .title)" 'دليل المهام'; eq "  body" "$(field .body)" 'كيف تستخدم المهام في القناة'; eq "  kind" "$(field .kind)" note
+eq "  tags normalized and deduped" "$(jq -c .tags <<<"$out")" '["ops","daily"]'; eq "  updated_by is the caller" "$(field .updated_by)" alice
+eq "  response has exactly the documented fields" "$(jq -c 'keys' <<<"$out")" '["body","kind","slug","tags","title","updated_at","updated_by","version"]'
+expect "the caller cannot claim another author" 200 PUT /v2/wiki/tasks-guide "$B" '{"body":"نسخة ثانية","updated_by":"mallory","version":99}'
+eq "  version increments" "$(field .version)" 2; eq "  author comes from the key" "$(field .updated_by)" bob
+api GET /v2/wiki/tasks-guide "$A"; eq "  title, kind and tags survive a body-only update" "$(jq -c '[.title,.kind,.tags]' <<<"$out")" '["دليل المهام","note",["ops","daily"]]'
+expect "retry of the same write" 200 PUT /v2/wiki/tasks-guide "$C" '{"body":"نسخة ثانية"}'; eq "  adds no version" "$(field .version)" 2; eq "  flagged unchanged" "$(field .unchanged)" true
+api GET /v2/wiki/tasks-guide "$A"; eq "  does not take over the page" "$(field .updated_by)" bob
+expect "history list" 200 GET /v2/wiki/tasks-guide/history "$C"; eq "  one old version" "$(field '.versions | length')" 1; eq "  current_version" "$(field .current_version)" 2
+eq "  entry has version, author, time, size only" "$(jq -c '.versions[0] | keys' <<<"$out")" '["deleted","size","updated_at","updated_by","version"]'
+eq "  size is in bytes" "$(field '.versions[0].size')" "$(printf '%s' 'كيف تستخدم المهام في القناة' | wc -c)"; eq "  author of the old version" "$(field '.versions[0].updated_by')" alice
+expect "old version in full" 200 GET /v2/wiki/tasks-guide/history/1 "$C"; eq "  old body" "$(field .body)" 'كيف تستخدم المهام في القناة'
+expect "missing version is 404" 404 GET /v2/wiki/tasks-guide/history/99 "$A"
+expect "bad version is 400" 400 GET /v2/wiki/tasks-guide/history/0x1 "$A"
+expect "slug named content is a normal page" 200 PUT /v2/wiki/content "$A" "$(page 'c' note 'not a file upload')"; api GET /v2/wiki/content "$A"; eq "  reads back" "$(field .body)" 'not a file upload'
+expect "slug named history is a normal page" 200 PUT /v2/wiki/history "$A" "$(page 'h' note 'also fine')"
+expect "  with its own history" 200 GET /v2/wiki/history/history "$A"
+for i in $(seq 1 24); do api PUT /v2/wiki/busy "$ADMIN" "$(page busy note "rev $i")"; done
+api GET /v2/wiki/busy/history "$A"; eq "history lists the latest 20" "$(field '.versions | length')" 20; eq "  newest first" "$(field '.versions[0].version')" 23; eq "  older versions are pruned" "$(field .total)" 20
+expect "  pruned version is gone" 404 GET /v2/wiki/busy/history/1 "$A"; expect "  kept version loads" 200 GET /v2/wiki/busy/history/4 "$A"; eq "    with the right body" "$(field .body)" 'rev 4'
+
+echo "== wiki: list and search"
+expect "english page" 200 PUT /v2/wiki/deploy-steps "$A" "$(page 'Deploy Steps' skill 'run wrangler deploy, then 100% check' '["DevOps","release"]')"
+slugs() { jq -c '[.pages[].slug] | sort' <<<"$out"; }
+expect "arabic search in the body, percent-encoded" 200 GET "/v2/wiki?q=$(uri 'نسخة')" "$A"; eq "  finds it" "$(slugs)" '["tasks-guide"]'
+api GET "/v2/wiki?q=$(uri 'مهام')" "$A"; eq "arabic search q=مهام in the title" "$(slugs)" '["tasks-guide"]'
+api GET "/v2/wiki?q=مهام" "$A"; eq "  also with raw UTF-8 in the URL" "$(slugs)" '["tasks-guide"]'
+api GET "/v2/wiki?q=WRANGLER" "$A"; eq "english search ignores case" "$(slugs)" '["deploy-steps"]'
+api GET "/v2/wiki?q=$(uri '%')" "$A"; eq "% is literal, not a wildcard" "$(slugs)" '["deploy-steps"]'
+api GET "/v2/wiki?q=$(uri '_')" "$A"; eq "_ is literal, not a wildcard" "$(slugs)" '[]'
+api GET "/v2/wiki?q=$(uri "' OR 1=1 --")" "$A"; eq "SQL in q is just text" "$(slugs)" '[]'
+expect "very long q is 400" 400 GET "/v2/wiki?q=$(head -c 201 /dev/zero | tr '\0' a)" "$A"
+api GET "/v2/wiki?kind=skill" "$A"; eq "kind filter" "$(slugs)" '["deploy-steps"]'
+expect "unknown kind is 400" 400 GET "/v2/wiki?kind=secret" "$A"
+api GET "/v2/wiki?tag=devops" "$A"; eq "tag filter" "$(slugs)" '["deploy-steps"]'
+api GET "/v2/wiki?tag=DevOps" "$A"; eq "  normalizes the query" "$(slugs)" '["deploy-steps"]'
+api GET "/v2/wiki?tag=ops" "$A"; eq "  matches whole tags, not substrings" "$(slugs)" '["tasks-guide"]'
+api GET "/v2/wiki?kind=skill&tag=ops" "$A"; eq "filters combine" "$(slugs)" '[]'
+api GET /v2/wiki "$A"; eq "list omits bodies" "$(jq -c '[.pages[] | has("body")] | any' <<<"$out")" false; eq "  tags are arrays" "$(jq -r '.pages[] | select(.slug=="deploy-steps") | .tags[0]' <<<"$out")" devops
+
+echo "== wiki: secrets and content rules"
+GHT=ghp_abcdefghijklmnopqrstuvwxyz123456
+expect "secret in body is 422" 422 PUT /v2/wiki/leak "$A" "$(page t note "token is $GHT")"
+expect "relay key in body is 422" 422 PUT /v2/wiki/leak "$A" "$(page t note "$A")"
+expect "admin key in body is 422" 422 PUT /v2/wiki/leak "$A" "$(page t note "key is $ADMIN")"
+expect "secret in title is 422" 422 PUT /v2/wiki/leak "$A" "$(page "$GHT" note ok)"
+expect "secret in a tag is 422" 422 PUT /v2/wiki/leak "$A" "$(page t note ok '["ghp_abcdefghijklmnopqrstuvwxyz"]')"
+expect "secret as the slug is 422" 422 PUT "/v2/wiki/ark_$(printf 'a%.0s' $(seq 1 32))" "$A" "$(page t note ok)"
+expect "secret on update is 422" 422 PUT /v2/wiki/tasks-guide "$A" "{\"body\":\"$GHT\"}"
+expect "  and nothing was stored" 404 GET /v2/wiki/leak "$A"
+api GET /v2/wiki/tasks-guide "$A"; eq "  page stays as it was" "$(field .version)" 2
+for h in '<!DOCTYPE html><p>' '<html>' '<script>x</script>' '<SCRIPT src=x>' '  <html>'; do
+  expect "body starting [${h:0:10}] is 415" 415 PUT /v2/wiki/htmlx "$A" "$(page t note "$h")"
+done
+expect "BOM before <script is 415" 415 PUT /v2/wiki/htmlx "$A" "$(page t note "$(printf '\xef\xbb\xbf<script>')")"
+expect "newlines before <html is 415" 415 PUT /v2/wiki/htmlx "$A" '{"title":"t","body":"\n\n<html>"}'
+expect "markup later in the text is fine" 200 PUT /v2/wiki/htmlx "$A" "$(page t note 'use <script> carefully')"
+expect "9 tags is 400" 400 PUT /v2/wiki/tagsx "$A" "$(page t note ok '["a","b","c","d","e","f","g","h","i"]')"
+expect "8 tags is fine" 200 PUT /v2/wiki/tagsx "$A" "$(page t note ok '["a","b","c","d","e","f","g","h"]')"
+expect "31 char tag is 400" 400 PUT /v2/wiki/tagsx "$A" "$(page t note ok "[\"$(head -c 31 /dev/zero | tr '\0' a)\"]")"
+expect "30 char tag is fine" 200 PUT /v2/wiki/tagsx "$A" "$(page t note ok2 "[\"$(head -c 30 /dev/zero | tr '\0' a)\"]")"
+expect "non-string tag is 400" 400 PUT /v2/wiki/tagsx "$A" "$(page t note ok '[1]')"
+expect "tags must be a list" 400 PUT /v2/wiki/tagsx "$A" '{"title":"t","body":"b","tags":"a,b"}'
+expect "empty tag is 400" 400 PUT /v2/wiki/tagsx "$A" "$(page t note ok '["  "]')"
+expect "unknown kind on write is 400" 400 PUT /v2/wiki/kindx "$A" "$(page t secret ok)"
+expect "new page needs a title" 400 PUT /v2/wiki/kindx "$A" '{"body":"b"}'
+expect "blank title is 400" 400 PUT /v2/wiki/kindx "$A" '{"title":"   ","body":"b"}'
+expect "missing body is 400" 400 PUT /v2/wiki/kindx "$A" '{"title":"t"}'
+expect "blank body is 400" 400 PUT /v2/wiki/kindx "$A" '{"title":"t","body":"   "}'
+expect "NUL in body is 400" 400 PUT /v2/wiki/kindx "$A" '{"title":"t","body":"a\u0000b"}'
+expect "non-text body is 400" 400 PUT /v2/wiki/kindx "$A" '{"title":"t","body":{"a":1}}'
+wbody() { { printf '{"title":"big","body":"'; cat; printf '"}'; } > "$TMP/wiki.json"; }
+head -c 102400 /dev/zero | tr '\0' w | wbody; api_file PUT /v2/wiki/sized "$A" "$TMP/wiki.json"; eq "exactly 100KB is accepted" "$code" 200
+head -c 102401 /dev/zero | tr '\0' w | wbody; api_file PUT /v2/wiki/sized "$A" "$TMP/wiki.json"; eq "100KB + 1 byte is 413" "$code" 413
+for _ in $(seq 1 50000); do printf '\\u0645'; done | wbody; api_file PUT /v2/wiki/arabic-big "$A" "$TMP/wiki.json"; eq "100KB of Arabic sent as \\uXXXX escapes (300KB request) is accepted" "$code" 200
+expect "  stored at its real size" 200 GET /v2/wiki/arabic-big/history "$A"; api GET "/v2/wiki?q=$(uri 'م')&kind=note" "$A"; eq "    100000 bytes" "$(jq -r '.pages[] | select(.slug=="arabic-big") | .size' <<<"$out")" 100000
+head -c 400000 /dev/zero | tr '\0' w | wbody; api_file PUT /v2/wiki/sized "$A" "$TMP/wiki.json"; eq "400KB request is 413 before the Durable Object" "$code" 413
+expect "request right after it is handled normally" 200 GET /v2/wiki/sized "$A"
+api_file POST /v2/messages "$A" "$TMP/wiki.json"; eq "other routes keep the 100KB cap" "$code" 413
+
+echo "== wiki: who can write context"
+expect "ordinary agent cannot create context" 403 PUT /v2/wiki/ctx "$A" "$(page t context ok)"
+expect "  nor is it stored" 404 GET /v2/wiki/ctx "$A"
+expect "admin can" 200 PUT /v2/wiki/ctx "$ADMIN" "$(page 'سياق' context 'نص السياق')"; eq "  by __admin__" "$(field .updated_by)" __admin__
+expect "any agent can read context" 200 GET /v2/wiki/ctx "$C"
+expect "ordinary agent cannot edit context" 403 PUT /v2/wiki/ctx "$A" '{"body":"changed"}'
+expect "nor relabel it as a note to edit it" 403 PUT /v2/wiki/ctx "$A" "$(page t note changed)"
+api GET /v2/wiki/ctx "$A"; eq "  page is untouched" "$(jq -c '[.kind,.body,.version]' <<<"$out")" '["context","نص السياق",1]'
+expect "nor turn a note into context" 403 PUT /v2/wiki/tasks-guide "$A" '{"kind":"context","body":"x"}'
+expect "wrong acl target is 400" 400 POST /v2/acl "$ADMIN" '{"from":"alice","to":"bob","kind":"wiki:context"}'
+expect "agent cannot grant itself" 404 POST /v2/acl "$A" '{"from":"alice","to":"__wiki__","kind":"wiki:context"}'
+expect "reserved name cannot join" 400 POST /v2/join "$ADMIN" '{"agent":"__wiki__"}'
+expect "reserved name cannot be invited" 400 POST /v2/invites "$ADMIN" '{"agent":"__wiki__"}'
+expect "grant wiki:context" 200 POST /v2/acl "$ADMIN" '{"from":"alice","to":"__wiki__","kind":"wiki:context"}'
+expect "granted agent can edit context" 200 PUT /v2/wiki/ctx "$A" '{"body":"نص محدث"}'
+expect "granted agent can create context" 200 PUT /v2/wiki/ctx2 "$A" "$(page t context ok)"
+expect "other agents still cannot" 403 PUT /v2/wiki/ctx "$B" '{"body":"x"}'
+expect "other agents cannot delete context" 403 DELETE /v2/wiki/ctx "$B"
+expect "remove the grant" 200 POST /v2/acl "$ADMIN" '{"from":"alice","to":"__wiki__","kind":"wiki:context","allow":false}'
+expect "revoked grant stops edits" 403 PUT /v2/wiki/ctx "$A" '{"body":"y"}'
+expect "  and stops deletes, even by the last editor" 403 DELETE /v2/wiki/ctx "$A"
+
+echo "== wiki: delete"
+quota() { api GET /v2/wiki "$A"; field "$1"; }
+expect "page to delete" 200 PUT /v2/wiki/gone "$A" "$(page 'g' note 'first')"
+expect "second version" 200 PUT /v2/wiki/gone "$B" '{"body":"second"}'
+expect "earlier author cannot delete" 403 DELETE /v2/wiki/gone "$A"
+expect "stranger cannot delete" 403 DELETE /v2/wiki/gone "$C"
+expect "last editor deletes" 200 DELETE /v2/wiki/gone "$B"; eq "  tombstone version" "$(field .version)" 3
+expect "deleted page is 404" 404 GET /v2/wiki/gone "$A"
+expect "second delete is 404" 404 DELETE /v2/wiki/gone "$B"
+api GET "/v2/wiki?q=second" "$A"; eq "deleted page leaves the list" "$(slugs)" '[]'
+expect "history survives the delete" 200 GET /v2/wiki/gone/history "$A"; eq "  current_version is null" "$(field .current_version)" null; eq "  tombstone first" "$(field '.versions[0].deleted')" true; eq "  by the deleter" "$(field '.versions[0].updated_by')" bob
+expect "the last body can be recovered" 200 GET /v2/wiki/gone/history/2 "$A"; eq "  body" "$(field .body)" second
+expect "tombstone has no body to load" 404 GET /v2/wiki/gone/history/3 "$A"
+expect "slug can be reused" 200 PUT /v2/wiki/gone "$C" "$(page 'g2' note 'third')"; eq "  version keeps counting" "$(field .version)" 4
+expect "  and updated again" 200 PUT /v2/wiki/gone "$C" '{"body":"fourth"}'; eq "  version 5" "$(field .version)" 5
+expect "admin can delete any page" 200 DELETE /v2/wiki/gone "$ADMIN"
+expect "agent cannot purge" 403 DELETE "/v2/wiki/gone?purge=1" "$C"
+expect "admin purge erases the history" 200 DELETE "/v2/wiki/gone?purge=1" "$ADMIN"
+expect "  history is gone" 404 GET /v2/wiki/gone/history "$A"
+expect "  second purge is 404" 404 DELETE "/v2/wiki/gone?purge=1" "$ADMIN"
+
+echo "== wiki: quotas and rate limit"
+expect "fresh agent for the rate limit" 200 POST /v2/join "$ADMIN" '{"agent":"wikirate"}'; WR=$(field .key)
+for i in $(seq 1 60); do api PUT /v2/wiki/rate-page "$WR" "$(page r note "rate $i")"; [ "$code" = 200 ] || break; done
+eq "60 writes in an hour pass" "$code:$i" 200:60
+expect "61st write is 429" 429 PUT /v2/wiki/rate-page "$WR" "$(page r note 'rate 61')"
+expect "  the same content again is still a no-op" 200 PUT /v2/wiki/rate-page "$WR" "$(page r note 'rate 60')"
+expect "  reads are unaffected" 200 GET /v2/wiki/rate-page "$WR"
+expect "  another agent is unaffected" 200 PUT /v2/wiki/rate-other "$C" "$(page r note 'x')"
+expect "  the limited agent can still delete its page" 200 DELETE /v2/wiki/rate-page "$WR"
+
+# Throwaway bodies fill the rest. The admin is exempt from the rate limit, which keeps this fast.
+expect "start from an empty wiki" 200 GET /v2/wiki "$ADMIN"
+for s in $(jq -r '.pages[].slug' <<<"$out"); do api DELETE "/v2/wiki/$s?purge=1" "$ADMIN"; done
+for s in gone rate-page; do api DELETE "/v2/wiki/$s?purge=1" "$ADMIN"; done
+api GET /v2/wiki "$ADMIN"; eq "counters return to zero" "$(jq -c '[.quota.pages,.quota.bytes]' <<<"$out")" '[0,0]'; eq "  limits are reported" "$(jq -c '[.quota.max_pages,.quota.max_bytes]' <<<"$out")" '[200,5242880]'
+expect "counted page" 200 PUT /v2/wiki/count "$ADMIN" "$(page c note 'خمسة')"; expect "counted update" 200 PUT /v2/wiki/count "$ADMIN" '{"body":"abc"}'
+api GET /v2/wiki "$ADMIN"; eq "bytes count both versions" "$(jq -c '[.quota.pages,.quota.bytes]' <<<"$out")" "[1,$(($(printf 'خمسة' | wc -c) + 3))]"
+expect "delete keeps the bytes for recovery" 200 DELETE /v2/wiki/count "$ADMIN"
+api GET /v2/wiki "$ADMIN"; eq "  page count drops, bytes stay" "$(jq -c '[.quota.pages,.quota.bytes]' <<<"$out")" "[0,$(($(printf 'خمسة' | wc -c) + 3))]"
+expect "purge frees them" 200 DELETE "/v2/wiki/count?purge=1" "$ADMIN"
+api GET /v2/wiki "$ADMIN"; eq "  back to zero" "$(jq -c '[.quota.pages,.quota.bytes]' <<<"$out")" '[0,0]'
+
+head -c 102400 /dev/zero | tr '\0' q | wbody
+qc=''; for i in $(seq 1 60); do api_file PUT "/v2/wiki/fill-$i" "$ADMIN" "$TMP/wiki.json"; qc=$code; [ "$code" = 200 ] || break; done
+eq "5MB quota refuses the next write" "$qc" 413; eq "  after 51 pages of 100KB" "$i" 52
+api GET /v2/wiki "$A"; eq "  stays within 5MB" "$(jq '.quota.bytes <= 5242880' <<<"$out")" true
+expect "  an update that still fits is accepted" 200 PUT /v2/wiki/fill-1 "$A" '{"body":"tiny"}'
+head -c 90000 /dev/zero | tr '\0' r | wbody; api_file PUT /v2/wiki/fill-2 "$ADMIN" "$TMP/wiki.json"; eq "  update that would pass 5MB is 413" "$code" 413
+expect "  reads still work when full" 200 GET /v2/wiki/fill-1 "$A"
+expect "  purge makes room" 200 DELETE "/v2/wiki/fill-3?purge=1" "$ADMIN"
+api_file PUT /v2/wiki/fill-2 "$ADMIN" "$TMP/wiki.json"; eq "  and writes resume" "$code" 200
+for i in $(seq 1 60); do api DELETE "/v2/wiki/fill-$i?purge=1" "$ADMIN"; done
+api GET /v2/wiki "$A"; eq "  counters are exact after all of that" "$(jq -c '[.quota.pages,.quota.bytes]' <<<"$out")" '[0,0]'
+pc=''; for i in $(seq 1 201); do api PUT "/v2/wiki/p-$i" "$ADMIN" "$(page p note x)"; pc=$code; [ "$code" = 200 ] || break; done
+eq "201st page is 413" "$pc:$i" 413:201
+expect "  existing pages can still be updated" 200 PUT /v2/wiki/p-1 "$A" '{"body":"y"}'
+expect "  deleting frees a page slot" 200 DELETE /v2/wiki/p-200 "$ADMIN"; expect "  so a new page fits" 200 PUT /v2/wiki/p-201 "$A" "$(page p note x)"
+expect "revoked agent cannot read the wiki" 200 POST /v2/revoke "$ADMIN" '{"agent":"wikirate"}'; expect "  401" 401 GET /v2/wiki "$WR"
 
 echo "== revoke"
 expect "revoke" 200 POST /v2/revoke "$ADMIN" '{"agent":"erin"}'
@@ -228,6 +404,19 @@ eq "page flood is 429" "$pc" 429
 
 echo "== page script against hostile data"
 node "$ROOT/test/page-check.mjs" && ok "page script passes" || no "page script passes"
+
+echo "== wiki: deleted history expires (WIKI_TOMBSTONE_MS=1000 in this relay)"
+stop_relay; sleep 1
+start_relay "$ROOT" wrangler.example.toml "$TMP/state2" "$PORT" "$ADMIN" 1000 WIKI_TOMBSTONE_MS:1000 || exit 1
+A2=$(join sweeper); B2=$(join sweep-exec)
+expect "page to expire" 200 PUT /v2/wiki/old "$A2" "$(page o note 'expiring body')"; expect "live page" 200 PUT /v2/wiki/keep "$A2" "$(page k note 'keep')"; expect "update it" 200 PUT /v2/wiki/keep "$A2" '{"body":"keep2"}'
+expect "delete" 200 DELETE /v2/wiki/old "$A2"; sleep 2
+api POST /v2/task-types "$ADMIN" '{"name":"sweep.tick","schema":{"type":"object"},"risk":"low","max_attempts":1}'; acl sweeper sweep-exec task:sweep.tick
+api POST /v2/tasks "$A2" '{"type":"sweep.tick","to":"sweep-exec","params":{}}'; ST=$(field .task.id); api POST "/v2/tasks/$ST/claim" "$B2"
+eq "an alarm runs" "$(wait_status "$ST" failed)" failed
+expect "expired history is removed" 404 GET /v2/wiki/old/history "$A2"
+expect "live page keeps its history" 200 GET /v2/wiki/keep/history "$A2"; eq "  one old version" "$(field .total)" 1
+api GET /v2/wiki "$A2"; eq "  bytes are released" "$(jq -c '[.quota.pages,.quota.bytes]' <<<"$out")" "[1,$((4 + 5))]"
 
 echo "== logging"
 ! grep -q 'Uncaught' "$TMP/wrangler.log" && ok "no uncaught runtime errors" || no "no uncaught runtime errors" "$(grep -m1 'Uncaught' "$TMP/wrangler.log")"

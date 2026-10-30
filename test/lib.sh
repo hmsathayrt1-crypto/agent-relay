@@ -17,13 +17,17 @@ api() {
   [ -n "${4:-}" ] && args+=(-H 'Content-Type: application/json' --data-binary "$4")
   code=$(curl_auth "$3" "${args[@]}"); out=$(cat "$TMP/out")
 }
+# api_file METHOD PATH TOKEN FILE: same as api, for bodies too long for an argument
+api_file() { code=$(curl_auth "$3" -sS -o "$TMP/out" -w '%{http_code}' -X "$1" "$BASE$2" -H 'Content-Type: application/json' --data-binary @"$4"); out=$(cat "$TMP/out"); }
+uri() { jq -rn --arg s "$1" '$s|@uri'; }
 field() { jq -r "$1" <<<"$out"; }
 # expect NAME STATUS METHOD PATH TOKEN [JSON]
 expect() { local n=$1 s=$2; shift 2; api "$@"; eq "$n" "$code" "$s"; }
 
-start_relay() { # start_relay DIR CONFIG PERSIST PORT ADMIN [LEASE_MS]
+start_relay() { # start_relay DIR CONFIG PERSIST PORT ADMIN [LEASE_MS] [NAME:VALUE ...]
   local dir=$1 cfg=$2 persist=$3 port=$4 admin=$5 lease=${6:-}
   local vars=(--var "ADMIN_KEY:$admin"); [ -n "$lease" ] && vars+=(--var "LEASE_MS:$lease")
+  shift $(($# < 6 ? $# : 6)); for v in "$@"; do vars+=(--var "$v"); done
   ( cd "$dir" && exec env -u CLOUDFLARE_API_TOKEN -u CLOUDFLARE_ACCOUNT_ID WRANGLER_SEND_METRICS=false \
       setsid wrangler dev -c "$cfg" --local --port "$port" --persist-to "$persist" "${vars[@]}" ) >>"$TMP/wrangler.log" 2>&1 &
   WPID=$!
