@@ -37,6 +37,7 @@ const GITHUB_INVITE_SCHEMA = {
 };
 
 const hasSecret = (s) => SECRET_PATTERNS.some(p => p.test(s));
+const aclKindOk = (k) => ['msg', 'file', 'broadcast'].includes(k) || /^task:[a-z0-9_.-]{1,64}$/.test(String(k));
 
 // JSON-Schema subset. Errors name paths, never values, so they are safe to return and store.
 function validate(schema, v, path = '$', errs = []) {
@@ -104,6 +105,7 @@ export class RelayHub {
       CREATE INDEX IF NOT EXISTS tasks_to ON tasks(to_agent, status);
       CREATE TRIGGER IF NOT EXISTS tasks_immutable BEFORE UPDATE OF params_json, params_sha256, type, from_agent, to_agent, parent_task_id, depth ON tasks
         BEGIN SELECT RAISE(ABORT, 'task params are immutable'); END;
+      CREATE TABLE IF NOT EXISTS invites(code_sha256 TEXT PRIMARY KEY, agent_name TEXT NOT NULL, acl_template TEXT NOT NULL DEFAULT '[]', expires_at INTEGER NOT NULL, redeemed_at INTEGER);
       ALTER TABLE counters ADD COLUMN expires_at INTEGER;
     `);
     this.sql.exec("INSERT OR IGNORE INTO task_types(name, executor, schema_json, risk, max_attempts, ttl_s) VALUES('github.invite', 'github-bot', ?, 'high', 1, 86400)", JSON.stringify(GITHUB_INVITE_SCHEMA));
@@ -138,6 +140,28 @@ export class RelayHub {
     if (n >= max) return false;
     this.sql.exec("INSERT INTO counters(scope,window,n,expires_at) VALUES(?,?,1,?) ON CONFLICT(scope,window) DO UPDATE SET n=n+1", scope, w, (w + 1) * windowMs);
     return true;
+  }
+
+  // Invite redemption is the one unauthenticated write, so it is throttled per IP and uses one generic failure.
+  async _redeem(request) {
+    const ip = request.headers.get('CF-Connecting-IP') || 'local';
+    if (!this._bump('join-ip:' + ip, 60 * 1000, 10)) return j({ error: 'rate limit: too many join attempts' }, 429);
+    const body = await request.json().catch(() => ({}));
+    const denied = () => j({ error: 'invalid or expired invite' }, 401);
+    if (!body.invite_code) return denied();
+    const code_sha256 = await sha256hex(String(body.invite_code));
+    const key = 'ark_' + crypto.randomUUID().replace(/-/g, '');
+    const key_hash = await sha256hex(key);
+    const now = Date.now();
+    const inv = this.sql.exec("SELECT agent_name, acl_template FROM invites WHERE code_sha256=? AND redeemed_at IS NULL AND expires_at>?", code_sha256, now).toArray()[0];
+    if (!inv) return denied();
+    if (this.sql.exec("SELECT 1 FROM agents WHERE name=?", inv.agent_name).toArray()[0]) return j({ error: 'agent exists' }, 409);
+    return this.state.storage.transactionSync(() => {
+      if (!this.sql.exec("UPDATE invites SET redeemed_at=? WHERE code_sha256=? AND redeemed_at IS NULL RETURNING code_sha256", now, code_sha256).toArray()[0]) return denied();
+      this.sql.exec("INSERT INTO agents(name, key_hash, created_at) VALUES(?,?,?)", inv.agent_name, key_hash, now);
+      for (const a of JSON.parse(inv.acl_template)) this.sql.exec("INSERT OR IGNORE INTO acl(from_agent,to_agent,kind) VALUES(?,?,?)", a.from, a.to, a.kind);
+      return j({ ok: true, agent: inv.agent_name, key }); // shown ONCE
+    });
   }
 
   async _wakeAt(t) {
@@ -323,6 +347,7 @@ export class RelayHub {
     const path = url.pathname;
     const method = request.method;
     const token = (request.headers.get('Authorization') || '').replace('Bearer ', '');
+    if (path === '/v2/join' && method === 'POST' && !token) return this._redeem(request);
     const me = await this._agentByToken(token);
     if (!me) return j({ error: 'unauthorized' }, 401);
     this.sql.exec("UPDATE agents SET last_seen=? WHERE name=?", Date.now(), me);
@@ -340,13 +365,32 @@ export class RelayHub {
         this.sql.exec("INSERT INTO agents(name, key_hash, created_at) VALUES(?,?,?)", name, await sha256hex(key), Date.now());
         return j({ ok: true, agent: name, key }); // shown ONCE
       }
+      if (path === '/v2/invites' && method === 'POST') {
+        if (!isAdmin) return j({ error: 'admin only' }, 403);
+        const name = String(body.agent || '').trim().toLowerCase();
+        if (!NAME_RE.test(name) || name === '__admin__' || name === '__all__') return j({ error: 'invalid agent name' }, 400);
+        if (this.sql.exec("SELECT 1 FROM agents WHERE name=?", name).toArray()[0]) return j({ error: 'agent exists' }, 409);
+        const template = body.acl_template === undefined ? [] : body.acl_template;
+        if (!Array.isArray(template) || template.length > 50) return j({ error: 'acl_template must be a list' }, 400);
+        for (const a of template) {
+          if (!a || !NAME_RE.test(String(a.from)) || !NAME_RE.test(String(a.to)) || !aclKindOk(a.kind) || (a.from !== name && a.to !== name))
+            return j({ error: 'each acl_template entry needs from, to, kind and must involve ' + name }, 400);
+        }
+        const ttl = body.ttl_s === undefined ? 3600 : Number(body.ttl_s);
+        if (!Number.isInteger(ttl) || ttl < 1 || ttl > 3600) return j({ error: 'ttl_s must be 1-3600' }, 400);
+        const code = 'inv_' + crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+        const expires_at = Date.now() + ttl * 1000;
+        const acl_template = JSON.stringify(template.map(a => ({ from: a.from, to: a.to, kind: a.kind })));
+        this.sql.exec("INSERT INTO invites(code_sha256, agent_name, acl_template, expires_at) VALUES(?,?,?,?)", await sha256hex(code), name, acl_template, expires_at);
+        return j({ ok: true, agent: name, invite_code: code, expires_at }); // shown ONCE
+      }
       if (path === '/v2/revoke' && isAdmin && method === 'POST') {
         this.sql.exec("UPDATE agents SET status='revoked', revoked_at=? WHERE name=?", Date.now(), String(body.agent || ''));
         return j({ ok: true });
       }
       if (path === '/v2/acl' && isAdmin && method === 'POST') {
         const { from, to, kind, allow } = body;
-        if (!NAME_RE.test(String(from)) || !NAME_RE.test(String(to)) || !(['msg', 'file', 'broadcast'].includes(kind) || /^task:[a-z0-9_.-]{1,64}$/.test(String(kind))))
+        if (!NAME_RE.test(String(from)) || !NAME_RE.test(String(to)) || !aclKindOk(kind))
           return j({ error: 'invalid acl args' }, 400);
         if (allow === false) this.sql.exec("DELETE FROM acl WHERE from_agent=? AND to_agent=? AND kind=?", from, to, kind);
         else this.sql.exec("INSERT OR IGNORE INTO acl(from_agent,to_agent,kind) VALUES(?,?,?)", from, to, kind);
@@ -525,6 +569,7 @@ export class RelayHub {
       this.sql.exec("DELETE FROM files WHERE id=?", f.id);
     }
     this.sql.exec("DELETE FROM counters WHERE expires_at IS NULL OR expires_at < ?", now);
+    this.sql.exec("DELETE FROM invites WHERE expires_at < ?", now - 7 * 86400 * 1000);
     const next = this.sql.exec("SELECT MIN(lease_until) AS m FROM tasks WHERE status='leased'").toArray()[0].m;
     await this.state.storage.setAlarm(Math.min(now + 3600 * 1000, next ? Math.max(next, now + 1000) : Infinity));
   }
