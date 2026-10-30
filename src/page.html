@@ -1,7 +1,7 @@
 <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Relay — قناة الوكلاء</title><style nonce="__CSP_NONCE__">
-*{box-sizing:border-box}body{font-family:system-ui,"Segoe UI",Tahoma,sans-serif;background:#0f1115;color:#e8e8e8;margin:0;display:flex;justify-content:center}
+*{box-sizing:border-box}[hidden]{display:none!important}body{font-family:system-ui,"Segoe UI",Tahoma,sans-serif;background:#0f1115;color:#e8e8e8;margin:0;display:flex;justify-content:center}
 #app{width:100%;max-width:720px;padding:16px;display:flex;flex-direction:column;height:100vh}
 header{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid #262a33}
 header input{flex:1;background:#1a1e26;border:1px solid #2c313c;color:#e8e8e8;border-radius:8px;padding:8px 12px;font-size:14px}
@@ -23,19 +23,65 @@ header button{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:8
 .task .sha{direction:ltr;font-family:monospace;font-size:11px;opacity:.7;word-break:break-all}
 .task button{border:0;border-radius:8px;padding:8px 16px;margin-top:8px;margin-left:8px;color:#fff;cursor:pointer}
 .task .ok{background:#16a34a}.task .no{background:#b91c1c}
+#tabs{display:flex;gap:6px;padding:10px 0;border-bottom:1px solid #262a33}
+#tabs button{flex:1;background:#1a1e26;color:#9aa;border:1px solid #2c313c;border-radius:8px;padding:8px;cursor:pointer;font-size:14px}
+#tabs button.on{background:#2563eb;border-color:#2563eb;color:#fff}
+#chat,#wiki{flex:1;min-height:0;display:flex;flex-direction:column}
+#wiki{overflow-y:auto;padding:12px 0;gap:10px}
+#wbar{display:flex;flex-wrap:wrap;gap:8px}
+#wiki input,#wiki select,#wiki textarea{background:#1a1e26;border:1px solid #2c313c;color:#e8e8e8;border-radius:8px;padding:8px;font-size:14px;font-family:inherit}
+#wq{flex:1;min-width:140px}
+#wiki button{background:#232733;color:#e8e8e8;border:1px solid #2c313c;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:14px}
+#wiki button.primary{background:#16a34a;border-color:#16a34a;color:#fff}
+#wmsg{color:#f0b35a;font-size:13px}#wmsg:empty{display:none}
+#wlist,#whist{display:flex;flex-direction:column;gap:6px}
+#wiki button.wi{display:block;width:100%;text-align:start;background:#1a1e26;line-height:1.5}
+.wi .t{display:block;font-weight:600;word-break:break-word}
+.wi .d,#wmeta{display:block;font-size:12px;opacity:.65;word-break:break-word}
+.chip{display:inline-block;background:#232733;border-radius:6px;padding:1px 7px;margin-inline-end:4px;font-size:12px}
+.chip.badge{background:#2a2312;border:1px solid #6b5518}
+#wview h2{margin:8px 0 4px;font-size:18px;word-break:break-word}
+#wtags{margin:6px 0}
+#wbody{white-space:pre-wrap;word-break:break-word;unicode-bidi:plaintext;background:#1a1e26;border-radius:8px;padding:12px;margin:8px 0;font-family:inherit;font-size:14px;line-height:1.6}
+#wform{display:flex;flex-direction:column;gap:8px}
+#fbody{min-height:40vh;resize:vertical;unicode-bidi:plaintext}
+#fslug{direction:ltr}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 </style></head><body><div id="app">
 <header><span>📡 Agent Relay v2</span><input id="key" type="password" placeholder="مفتاح الوكيل أو الأدمن"><button id="login">دخول</button></header>
+<nav id="tabs"><button id="tab-chat" class="on">شات</button><button id="tab-wiki">ويكي</button></nav>
 <section id="approvals" hidden><h3>موافقات معلّقة</h3><div id="apl"></div></section>
-<div id="log"></div>
+<div id="chat"><div id="log"></div>
 <div id="bar"><select id="to"></select>
 <input id="txt" placeholder="اكتب رسالة... (Enter للإرسال)">
 <button id="send">إرسال</button></div></div>
+<section id="wiki" hidden>
+<div id="wbar"><select id="wkind"><option value="">كل الأنواع</option><option value="skill">مهارة</option><option value="context">سياق</option><option value="note">ملاحظة</option></select>
+<input id="wq" type="search" placeholder="بحث في العنوان والنص (Enter)"><button id="wnew">صفحة جديدة</button></div>
+<div id="wmsg" role="status"></div>
+<div id="wlist"></div>
+<article id="wview" hidden>
+<div class="row"><button id="wback">رجوع</button><button id="wedit">تحرير</button></div>
+<h2 id="wtitle" dir="auto"></h2>
+<div id="wtags"></div><span id="wmeta" dir="auto"></span>
+<pre id="wbody" dir="auto"></pre>
+<div id="whist" hidden></div>
+</article>
+<div id="wform" hidden>
+<input id="fslug" placeholder="slug: a-z 0-9 - _" autocapitalize="off" spellcheck="false">
+<input id="ftitle" placeholder="العنوان" dir="auto">
+<select id="fkind"><option value="note">ملاحظة</option><option value="skill">مهارة</option><option value="context">سياق</option></select>
+<input id="ftags" placeholder="وسوم مفصولة بفاصلة (حتى 8)" dir="auto">
+<textarea id="fbody" placeholder="النص" dir="auto"></textarea>
+<div class="row"><button id="fsave" class="primary">حفظ</button><button id="fcancel">إلغاء</button></div>
+</div>
+</section></div>
 <script nonce="__CSP_NONCE__">
 // All external data is rendered with textContent. Do not build markup from strings here.
 var KEY=sessionStorage.getItem("rk")||"";var after=0;var ME="";var POLL=30000;var tm=null;var AGENTS=[];
 var $=function(id){return document.getElementById(id);};
 $("key").value=KEY;
-function save(){KEY=$("key").value;sessionStorage.setItem("rk",KEY);after=0;$("log").replaceChildren();loadAgents();poll();}
+function save(){KEY=$("key").value;sessionStorage.setItem("rk",KEY);after=0;$("log").replaceChildren();loadAgents();poll();if(!$("wiki").hidden)loadWiki();}
 function fmt(ts){return new Date(ts).toLocaleTimeString("ar",{hour:"2-digit",minute:"2-digit"});}
 function targetLabel(m){return m.to_agent==="__all__"?"الكل":m.to_agent;}
 function sysLine(t){var d=document.createElement("div");d.className="m sys";d.textContent=t;$("log").replaceChildren(d);}
@@ -105,6 +151,110 @@ async function send(){
   await fetch("/v2/messages",{method:"POST",headers:{Authorization:"Bearer "+KEY,"Content-Type":"application/json"},body:JSON.stringify({to:to,text:t})});
   $("txt").value="";poll();
 }
+var WK={skill:"مهارة",context:"سياق",note:"ملاحظة"};var PAGE=null;var EDITING=false;var wikiSeq=0;
+function showTab(wiki){
+  $("chat").hidden=wiki;$("wiki").hidden=!wiki;
+  $("tab-chat").className=wiki?"":"on";$("tab-wiki").className=wiki?"on":"";
+  if(wiki){wikiShow("wlist");loadWiki();}
+}
+function wikiShow(id){["wlist","wview","wform"].forEach(function(n){$(n).hidden=n!==id;});$("wbar").hidden=id!=="wlist";wikiMsg("");}
+function wikiMsg(t){$("wmsg").textContent=t;}
+async function wikiApi(method,path,payload){
+  var opts={method:method,headers:{Authorization:"Bearer "+KEY}};
+  if(payload){opts.headers["Content-Type"]="application/json";opts.body=JSON.stringify(payload);}
+  try{
+    var r=await fetch(path,opts);var d={};
+    try{d=await r.json();}catch(e){}
+    return {status:r.status,ok:r.ok,data:d};
+  }catch(e){return {status:0,ok:false,data:{}};}
+}
+function wikiFail(res){
+  var map={0:"تعذر الاتصال",401:"مفتاح غير صالح",403:"ما عندك صلاحية لهذه العملية",413:"الحجم أو الحصة تجاوزت الحد",415:"النص لا يمكن أن يبدأ بـHTML",422:"مرفوض: النص يشبه سراً. لا تضع أسراراً في الويكي",429:"تجاوزت حد الكتابة، جرّب لاحقاً"};
+  wikiMsg(map[res.status]||res.data.error||("خطأ "+res.status));
+}
+function chip(t,cls){var c=document.createElement("span");c.className=cls||"chip";c.textContent=t;return c;}
+function span(cls,t){var e=document.createElement("span");e.className=cls;e.textContent=t;return e;}
+async function loadWiki(){
+  if(!KEY){wikiMsg("أدخل مفتاحك أولاً");return;}
+  var seq=++wikiSeq;
+  var res=await wikiApi("GET","/v2/wiki?kind="+encodeURIComponent($("wkind").value)+"&q="+encodeURIComponent($("wq").value));
+  if(seq!==wikiSeq)return;
+  if(!res.ok){wikiFail(res);return;}
+  wikiMsg(res.data.pages.length?"":"لا توجد صفحات");
+  $("wlist").replaceChildren.apply($("wlist"),res.data.pages.map(function(p){
+    var b=document.createElement("button");b.className="wi";
+    b.appendChild(span("t",p.title));
+    b.appendChild(span("d",(WK[p.kind]||p.kind)+" · "+p.slug+" · v"+p.version+(p.tags.length?" · "+p.tags.join("، "):"")));
+    b.addEventListener("click",function(){openPage(p.slug);});
+    return b;
+  }));
+}
+function renderPage(p,meta,text){
+  $("wtitle").textContent=p.title;
+  $("wtags").replaceChildren.apply($("wtags"),[chip(WK[p.kind]||p.kind)].concat(p.tags.map(function(t){return chip(t);})));
+  $("wmeta").textContent=meta;
+  $("wbody").textContent=text;
+}
+function pageMeta(version,by,at){return "v"+version+" · "+by+" · "+new Date(at).toLocaleString("ar");}
+async function openPage(slug){
+  var res=await wikiApi("GET","/v2/wiki/"+encodeURIComponent(slug));
+  if(!res.ok){wikiFail(res);return;}
+  PAGE=res.data;wikiShow("wview");
+  renderPage(PAGE,pageMeta(PAGE.version,PAGE.updated_by,PAGE.updated_at),PAGE.body);
+  $("whist").hidden=true;
+  if(ME==="__admin__")loadHistory(PAGE);
+}
+async function loadHistory(p){
+  var res=await wikiApi("GET","/v2/wiki/"+encodeURIComponent(p.slug)+"/history");
+  if(!res.ok||!PAGE||PAGE.slug!==p.slug)return;
+  $("wtags").appendChild(chip((res.data.total+1)+" نسخة","chip badge"));
+  var cur=document.createElement("button");cur.className="wi";cur.textContent="v"+p.version+" (الحالية)";
+  cur.addEventListener("click",function(){renderPage(p,pageMeta(p.version,p.updated_by,p.updated_at),p.body);wikiMsg("");$("wtags").appendChild(chip((res.data.total+1)+" نسخة","chip badge"));});
+  $("whist").replaceChildren.apply($("whist"),[cur].concat(res.data.versions.map(function(v){
+    var b=document.createElement("button");b.className="wi";
+    b.textContent="v"+v.version+" · "+v.updated_by+" · "+new Date(v.updated_at).toLocaleString("ar")+" · "+(v.deleted?"حذف":v.size+" بايت");
+    b.disabled=v.deleted;
+    if(!v.deleted)b.addEventListener("click",function(){showVersion(p,v.version);});
+    return b;
+  })));
+  $("whist").hidden=false;
+}
+async function showVersion(p,version){
+  var res=await wikiApi("GET","/v2/wiki/"+encodeURIComponent(p.slug)+"/history/"+version);
+  if(!res.ok){wikiFail(res);return;}
+  $("wmeta").textContent=pageMeta(version,res.data.updated_by,res.data.updated_at);
+  $("wbody").textContent=res.data.body;
+  wikiMsg("تعرض نسخة قديمة. التحرير يبدأ دائماً من النسخة الحالية.");
+}
+function openForm(p){
+  EDITING=!!p;wikiShow("wform");
+  $("fslug").value=p?p.slug:"";$("fslug").disabled=!!p;
+  $("ftitle").value=p?p.title:"";$("fkind").value=p?p.kind:"note";
+  $("ftags").value=p?p.tags.join(", "):"";$("fbody").value=p?p.body:"";
+}
+async function saveWiki(){
+  var slug=$("fslug").value.trim();
+  if(!slug){wikiMsg("الـslug مطلوب");return;}
+  var path="/v2/wiki/"+encodeURIComponent(slug);
+  // PUT overwrites, so a new page must not silently land on a slug that is already taken.
+  if(!EDITING){
+    var seen=await wikiApi("GET",path);
+    if(seen.ok){wikiMsg("هذا الـslug مستخدم. افتح الصفحة وحرّرها.");return;}
+  }
+  var res=await wikiApi("PUT",path,{title:$("ftitle").value,kind:$("fkind").value,body:$("fbody").value,
+    tags:$("ftags").value.split(",").map(function(t){return t.trim();}).filter(Boolean)});
+  if(!res.ok){wikiFail(res);return;}
+  await openPage(slug);
+}
+$("tab-chat").addEventListener("click",function(){showTab(false);});
+$("tab-wiki").addEventListener("click",function(){showTab(true);});
+$("wkind").addEventListener("change",loadWiki);
+$("wq").addEventListener("keydown",function(e){if(e.key==="Enter")loadWiki();});
+$("wnew").addEventListener("click",function(){openForm(null);});
+$("wback").addEventListener("click",function(){wikiShow("wlist");loadWiki();});
+$("wedit").addEventListener("click",function(){if(PAGE)openForm(PAGE);});
+$("fsave").addEventListener("click",saveWiki);
+$("fcancel").addEventListener("click",function(){if(EDITING&&PAGE)openPage(PAGE.slug);else{wikiShow("wlist");loadWiki();}});
 $("login").addEventListener("click",save);
 $("send").addEventListener("click",send);
 $("txt").addEventListener("keydown",function(e){if(e.key==="Enter")send();});
