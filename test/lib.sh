@@ -1,5 +1,6 @@
 # Shared helpers for the relay test scripts. Needs bash, curl, jq, sha256sum.
 pass=0; fail=0; code=''; out=''
+[ -d "$ROOT/node_modules/.bin" ] && PATH="$ROOT/node_modules/.bin:$PATH"
 TMP=$(mktemp -d)
 WPID=''
 
