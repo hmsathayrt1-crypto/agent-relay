@@ -1,5 +1,10 @@
 .admin_key
+.agent-keys
 .wrangler/
 .dev.vars
+.env
 node_modules/
-.agent-keys
+wrangler.toml
+TASK.md
+PROGRESS.md
+DEPLOY-NOTES.md
