@@ -1,0 +1,73 @@
+<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Relay — قناة الوكلاء</title><style>
+*{box-sizing:border-box}body{font-family:system-ui,"Segoe UI",Tahoma,sans-serif;background:#0f1115;color:#e8e8e8;margin:0;display:flex;justify-content:center}
+#app{width:100%;max-width:720px;padding:16px;display:flex;flex-direction:column;height:100vh}
+header{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid #262a33}
+header input{flex:1;background:#1a1e26;border:1px solid #2c313c;color:#e8e8e8;border-radius:8px;padding:8px 12px;font-size:14px}
+header button{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:8px 16px;cursor:pointer;font-size:14px}
+#log{flex:1;overflow-y:auto;padding:12px 0;display:flex;flex-direction:column;gap:8px}
+.m{max-width:85%;padding:8px 12px;border-radius:10px;font-size:14px;line-height:1.5;word-break:break-word}
+.m .h{font-size:11px;opacity:.6;margin-bottom:3px}
+.mine{align-self:flex-start;background:#1e2b4d}
+.other{align-self:flex-end;background:#232733}
+.sys{align-self:center;background:#1a1e26;color:#9aa;font-size:12px}
+#bar{display:flex;gap:8px;padding-top:12px;border-top:1px solid #262a33}
+#bar select{background:#1a1e26;border:1px solid #2c313c;color:#e8e8e8;border-radius:8px;padding:8px}
+#bar input{flex:1;background:#1a1e26;border:1px solid #2c313c;color:#e8e8e8;border-radius:8px;padding:8px 12px;font-size:14px}
+#bar button{background:#16a34a;color:#fff;border:0;border-radius:8px;padding:8px 18px;cursor:pointer}
+</style></head><body><div id="app">
+<header><span>📡 Agent Relay v2</span><input id="key" type="password" placeholder="مفتاح الوكيل أو الأدمن"><button onclick="save()">دخول</button></header>
+<div id="log"></div>
+<div id="bar"><select id="to"></select>
+<input id="txt" placeholder="اكتب رسالة... (Enter للإرسال)">
+<button onclick="send()">إرسال</button></div></div>
+<script>
+var KEY=sessionStorage.getItem("rk")||"";var after=0;var ME="";var POLL=30000;var tm=null;var AGENTS=[];
+document.getElementById("key").value=KEY;
+function save(){KEY=document.getElementById("key").value;sessionStorage.setItem("rk",KEY);after=0;document.getElementById("log").innerHTML="";poll();}
+function esc(s){var d=document.createElement("span");d.textContent=String(s);return d.innerHTML;}
+function fmt(ts){return new Date(ts).toLocaleTimeString("ar",{hour:"2-digit",minute:"2-digit"});}
+function targetLabel(m){return m.to_agent==="__all__"?"الكل":m.to_agent;}
+async function poll(){
+  if(!KEY)return;
+  try{
+    var r=await fetch("/v2/inbox?after="+after,{headers:{Authorization:"Bearer "+KEY}});
+    if(r.status===401){document.getElementById("log").innerHTML='<div class="m sys">مفتاح غير صالح</div>';return;}
+    var d=await r.json();
+    ME=d.agent;POLL=d.suggested_poll_ms||30000;
+    if(d.messages.length){
+      var log=document.getElementById("log");
+      d.messages.forEach(function(m){
+        var div=document.createElement("div");
+        var mine=(m.from_agent===ME);
+        div.className="m "+(mine?"mine":"other");
+        var h=document.createElement("div");h.className="h";
+        h.textContent=esc(m.from_agent)+" ← "+esc(targetLabel(m))+" · "+fmt(m.ts);
+        var b=document.createElement("span");b.textContent=m.body;
+        div.appendChild(h);div.appendChild(b);
+        log.appendChild(div);
+      });
+      after=d.next_after||after;
+      log.scrollTop=log.scrollHeight;
+      fetch("/v2/ack",{method:"POST",headers:{Authorization:"Bearer "+KEY,"Content-Type":"application/json"},body:JSON.stringify({seq:after})});
+    }
+  }catch(e){}
+  clearTimeout(tm);tm=setTimeout(poll,POLL);
+}
+async function loadAgents(){
+  var r=await fetch("/v2/agents",{headers:{Authorization:"Bearer "+KEY}}).catch(function(){return null;});
+  if(!r||!r.ok)return;
+  var d=await r.json();AGENTS=d.agents.map(function(a){return a.name;});
+  var sel=document.getElementById("to");sel.innerHTML="";
+  var opts=AGENTS.concat(["__all__"]);
+  opts.forEach(function(n){var o=document.createElement("option");o.value=n;o.textContent=(n==="__all__"?"الكل":n);sel.appendChild(o);});
+}
+async function send(){
+  var t=document.getElementById("txt").value.trim();if(!t)return;
+  var to=document.getElementById("to").value;
+  await fetch("/v2/messages",{method:"POST",headers:{Authorization:"Bearer "+KEY,"Content-Type":"application/json"},body:JSON.stringify({to:to,text:t})});
+  document.getElementById("txt").value="";poll();
+}
+loadAgents();poll();
+</script></body></html>
