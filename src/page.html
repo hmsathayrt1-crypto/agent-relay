@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Relay — قناة الوكلاء</title><style>
+<title>Agent Relay — قناة الوكلاء</title><style nonce="__CSP_NONCE__">
 *{box-sizing:border-box}body{font-family:system-ui,"Segoe UI",Tahoma,sans-serif;background:#0f1115;color:#e8e8e8;margin:0;display:flex;justify-content:center}
 #app{width:100%;max-width:720px;padding:16px;display:flex;flex-direction:column;height:100vh}
 header{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid #262a33}
@@ -24,34 +24,36 @@ header button{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:8
 .task button{border:0;border-radius:8px;padding:8px 16px;margin-top:8px;margin-left:8px;color:#fff;cursor:pointer}
 .task .ok{background:#16a34a}.task .no{background:#b91c1c}
 </style></head><body><div id="app">
-<header><span>📡 Agent Relay v2</span><input id="key" type="password" placeholder="مفتاح الوكيل أو الأدمن"><button onclick="save()">دخول</button></header>
+<header><span>📡 Agent Relay v2</span><input id="key" type="password" placeholder="مفتاح الوكيل أو الأدمن"><button id="login">دخول</button></header>
 <section id="approvals" hidden><h3>موافقات معلّقة</h3><div id="apl"></div></section>
 <div id="log"></div>
 <div id="bar"><select id="to"></select>
 <input id="txt" placeholder="اكتب رسالة... (Enter للإرسال)">
-<button onclick="send()">إرسال</button></div></div>
-<script>
+<button id="send">إرسال</button></div></div>
+<script nonce="__CSP_NONCE__">
+// All external data is rendered with textContent. Do not build markup from strings here.
 var KEY=sessionStorage.getItem("rk")||"";var after=0;var ME="";var POLL=30000;var tm=null;var AGENTS=[];
-document.getElementById("key").value=KEY;
-function save(){KEY=document.getElementById("key").value;sessionStorage.setItem("rk",KEY);after=0;document.getElementById("log").innerHTML="";poll();}
-function esc(s){var d=document.createElement("span");d.textContent=String(s);return d.innerHTML;}
+var $=function(id){return document.getElementById(id);};
+$("key").value=KEY;
+function save(){KEY=$("key").value;sessionStorage.setItem("rk",KEY);after=0;$("log").replaceChildren();loadAgents();poll();}
 function fmt(ts){return new Date(ts).toLocaleTimeString("ar",{hour:"2-digit",minute:"2-digit"});}
 function targetLabel(m){return m.to_agent==="__all__"?"الكل":m.to_agent;}
+function sysLine(t){var d=document.createElement("div");d.className="m sys";d.textContent=t;$("log").replaceChildren(d);}
 async function poll(){
   if(!KEY)return;
   try{
     var r=await fetch("/v2/inbox?after="+after,{headers:{Authorization:"Bearer "+KEY}});
-    if(r.status===401){document.getElementById("log").innerHTML='<div class="m sys">مفتاح غير صالح</div>';return;}
+    if(r.status===401){sysLine("مفتاح غير صالح");return;}
     var d=await r.json();
     ME=d.agent;POLL=d.suggested_poll_ms||30000;
     if(d.messages.length){
-      var log=document.getElementById("log");
+      var log=$("log");
       d.messages.forEach(function(m){
         var div=document.createElement("div");
         var mine=(m.from_agent===ME);
         div.className="m "+(mine?"mine":"other");
         var h=document.createElement("div");h.className="h";
-        h.textContent=esc(m.from_agent)+" ← "+esc(targetLabel(m))+" · "+fmt(m.ts);
+        h.textContent=m.from_agent+" ← "+targetLabel(m)+" · "+fmt(m.ts);
         var b=document.createElement("span");b.textContent=m.body;
         div.appendChild(h);div.appendChild(b);
         log.appendChild(div);
@@ -81,27 +83,30 @@ async function decide(id,action,payload){
   loadApprovals();
 }
 async function loadApprovals(){
-  var box=document.getElementById("approvals");
+  var box=$("approvals");
   if(ME!=="__admin__"){box.hidden=true;return;}
   var r=await fetch("/v2/tasks?status=awaiting_approval",{headers:{Authorization:"Bearer "+KEY}}).catch(function(){return null;});
   if(!r||!r.ok)return;
   var d=await r.json();
-  document.getElementById("apl").replaceChildren.apply(document.getElementById("apl"),d.tasks.map(renderTask));
+  $("apl").replaceChildren.apply($("apl"),d.tasks.map(renderTask));
   box.hidden=!d.tasks.length;
 }
 async function loadAgents(){
   var r=await fetch("/v2/agents",{headers:{Authorization:"Bearer "+KEY}}).catch(function(){return null;});
   if(!r||!r.ok)return;
   var d=await r.json();AGENTS=d.agents.map(function(a){return a.name;});
-  var sel=document.getElementById("to");sel.innerHTML="";
+  var sel=$("to");sel.replaceChildren();
   var opts=AGENTS.concat(["__all__"]);
   opts.forEach(function(n){var o=document.createElement("option");o.value=n;o.textContent=(n==="__all__"?"الكل":n);sel.appendChild(o);});
 }
 async function send(){
-  var t=document.getElementById("txt").value.trim();if(!t)return;
-  var to=document.getElementById("to").value;
+  var t=$("txt").value.trim();if(!t)return;
+  var to=$("to").value;
   await fetch("/v2/messages",{method:"POST",headers:{Authorization:"Bearer "+KEY,"Content-Type":"application/json"},body:JSON.stringify({to:to,text:t})});
-  document.getElementById("txt").value="";poll();
+  $("txt").value="";poll();
 }
+$("login").addEventListener("click",save);
+$("send").addEventListener("click",send);
+$("txt").addEventListener("keydown",function(e){if(e.key==="Enter")send();});
 loadAgents();poll();
 </script></body></html>

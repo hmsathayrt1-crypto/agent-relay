@@ -10,7 +10,10 @@ const PAIR_MAX = 20;
 const DUP_MAX = 3;
 const DAY_MAX = 2000;
 const ALLOWED_EXT = ['md','txt','json','yaml','yml','toml','csv','log','diff','patch','png','jpg','jpeg','webp','pdf','zip','gz'];
-const SECRET_PATTERNS = [/ghp_[A-Za-z0-9]{20,}/, /github_pat_[A-Za-z0-9_]{20,}/, /sk-[A-Za-z0-9-_]{16,}/, /AKIA[0-9A-Z]{16}/, /ark_[a-f0-9]{32}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/];
+const MAX_JSON = 100 * 1024;
+const PAGE_RATE_MAX = 60;
+// \b on sk- matters: without it ordinary words like "task-management-workflow" match.
+const SECRET_PATTERNS = [/gh[pousr]_[A-Za-z0-9]{20,}/, /github_pat_[A-Za-z0-9_]{20,}/, /\bsk-[A-Za-z0-9-_]{16,}/, /AKIA[0-9A-Z]{16}/, /ark_[a-f0-9]{32}/, /inv_[a-f0-9]{64}/, /-----BEGIN [A-Z ]*PRIVATE KEY-----/];
 
 const j = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...extra } });
@@ -19,6 +22,36 @@ const sha256hex = async (s) => {
   const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
 };
+
+// Reads at most max bytes even when Content-Length is missing or wrong (chunked uploads). Returns null if over.
+async function readCapped(request, max) {
+  if (Number(request.headers.get('Content-Length') || 0) > max || !request.body) return request.body ? null : new Uint8Array(0);
+  const chunks = [];
+  let total = 0;
+  const reader = request.body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) { await reader.cancel(); return null; }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.byteLength; }
+  return out;
+}
+
+// Returns the parsed object, or a Response to send back.
+async function readJson(request) {
+  const raw = await readCapped(request, MAX_JSON);
+  if (raw === null) return j({ error: 'request body too large', max: MAX_JSON }, 413);
+  if (!raw.byteLength) return {};
+  try {
+    const v = JSON.parse(new TextDecoder().decode(raw));
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : j({ error: 'body must be a JSON object' }, 400);
+  } catch (e) { return j({ error: 'invalid JSON' }, 400); }
+}
 
 const NAME_RE = /^[a-z0-9_-]{1,32}$/;
 const TYPE_RE = /^[a-z0-9_.-]{1,64}$/;
@@ -107,6 +140,7 @@ export class RelayHub {
         BEGIN SELECT RAISE(ABORT, 'task params are immutable'); END;
       CREATE TABLE IF NOT EXISTS invites(code_sha256 TEXT PRIMARY KEY, agent_name TEXT NOT NULL, acl_template TEXT NOT NULL DEFAULT '[]', expires_at INTEGER NOT NULL, redeemed_at INTEGER);
       ALTER TABLE counters ADD COLUMN expires_at INTEGER;
+      ALTER TABLE messages ADD COLUMN redacted_at INTEGER;
     `);
     this.sql.exec("INSERT OR IGNORE INTO task_types(name, executor, schema_json, risk, max_attempts, ttl_s) VALUES('github.invite', 'github-bot', ?, 'high', 1, 86400)", JSON.stringify(GITHUB_INVITE_SCHEMA));
     this.sql.exec("UPDATE meta SET value='2' WHERE key='schema_version'");
@@ -127,8 +161,8 @@ export class RelayHub {
 
   async _agentByToken(token) {
     if (!token) return null;
-    if (token === this.env.ADMIN_KEY) return '__admin__';
     const h = await sha256hex(token);
+    if (this.env.ADMIN_KEY && h === await sha256hex(this.env.ADMIN_KEY)) return '__admin__';
     const r = this.sql.exec("SELECT name, status FROM agents WHERE key_hash=? AND status='active'", h).toArray()[0];
     return r ? r.name : null;
   }
@@ -146,7 +180,8 @@ export class RelayHub {
   async _redeem(request) {
     const ip = request.headers.get('CF-Connecting-IP') || 'local';
     if (!this._bump('join-ip:' + ip, 60 * 1000, 10)) return j({ error: 'rate limit: too many join attempts' }, 429);
-    const body = await request.json().catch(() => ({}));
+    const body = await readJson(request);
+    if (body instanceof Response) return body;
     const denied = () => j({ error: 'invalid or expired invite' }, 401);
     if (!body.invite_code) return denied();
     const code_sha256 = await sha256hex(String(body.invite_code));
@@ -353,7 +388,10 @@ export class RelayHub {
     this.sql.exec("UPDATE agents SET last_seen=? WHERE name=?", Date.now(), me);
     const isAdmin = me === '__admin__';
     let body = {};
-    if ((method === 'POST' || method === 'PUT') && !path.endsWith('/content')) body = await request.json().catch(() => ({}));
+    if ((method === 'POST' || method === 'PUT') && !path.endsWith('/content')) {
+      body = await readJson(request);
+      if (body instanceof Response) return body;
+    }
 
     try {
       // ---------- admin ----------
@@ -415,7 +453,7 @@ export class RelayHub {
         const text = body.text;
         if (typeof text !== 'string' || !text.trim()) return j({ error: 'text required' }, 400);
         if (text.length > MAX_MSG) return j({ error: 'message too large', max: MAX_MSG }, 413);
-        for (const p of SECRET_PATTERNS) if (p.test(text)) return j({ error: 'rejected: looks like a secret — pass a reference/file instead' }, 422);
+        if (hasSecret(text) || (this.env.ADMIN_KEY && text.includes(this.env.ADMIN_KEY))) return j({ error: 'rejected: looks like a secret — pass a reference/file instead' }, 422);
 
         let toAgent;
         if (to === '__all__') toAgent = '__all__';
@@ -430,6 +468,15 @@ export class RelayHub {
           if (!this.sql.exec("SELECT 1 FROM acl WHERE from_agent=? AND to_agent=? AND kind=?", me, toAgent, kind).toArray()[0])
             return j({ error: 'acl denies ' + me + ' -> ' + toAgent + ' (' + kind + ')' }, 403);
         }
+        // Before the rate limits: a retry of a message that already landed must not burn quota or hit 429.
+        const idem = body.idem_key ? String(body.idem_key).slice(0, 100) : null;
+        if (idem) {
+          const dup = this.sql.exec("SELECT seq, id, body, redacted_at FROM messages WHERE from_agent=? AND idem_key=?", me, idem).toArray()[0];
+          if (dup) {
+            if (!dup.redacted_at && dup.body !== text) return j({ error: 'idem_key reused with different content' }, 409);
+            return j({ ok: true, msg: { seq: dup.seq, id: dup.id }, deduplicated: true });
+          }
+        }
         if (!isAdmin) {
           if (!this._bump('pair:' + me + '>' + toAgent, PAIR_WINDOW_MS, PAIR_MAX)) return j({ error: 'rate limit: too many messages to ' + toAgent }, 429);
           if (!this._bump('day:' + me, 24 * 3600 * 1000, DAY_MAX)) return j({ error: 'daily quota exceeded' }, 429);
@@ -439,25 +486,26 @@ export class RelayHub {
         if (body.reply_to) {
           const p = this.sql.exec("SELECT hop, thread_id, to_agent, from_agent FROM messages WHERE id=?", String(body.reply_to)).toArray()[0];
           if (!p) return j({ error: 'reply_to not found' }, 400);
-          if (me !== p.to_agent && me !== p.from_agent) return j({ error: 'cannot reply to a message you cannot see' }, 403);
+          if (me !== p.to_agent && me !== p.from_agent && p.to_agent !== '__all__') return j({ error: 'cannot reply to a message you cannot see' }, 403);
           hop = p.hop + 1;
           if (hop > HOP_LIMIT) return j({ error: 'conversation too deep (loop guard)' }, 429);
           thread = thread || p.thread_id || p.id;
         }
         const id = Date.now() + '-' + crypto.randomUUID().slice(0, 8);
         const ts = Date.now();
-        const idem = body.idem_key ? String(body.idem_key).slice(0, 100) : null;
-        if (idem) {
-          const dup = this.sql.exec("SELECT seq, id, body FROM messages WHERE from_agent=? AND idem_key=?", me, idem).toArray()[0];
-          if (dup) {
-            if (dup.body !== text) return j({ error: 'idem_key reused with different content' }, 409);
-            return j({ ok: true, msg: { seq: dup.seq, id: dup.id }, deduplicated: true });
-          }
-        }
+        if (body.thread_id !== undefined && String(body.thread_id).length > 100) return j({ error: 'thread_id too long' }, 400);
         this.sql.exec("INSERT INTO messages(id, from_agent, to_agent, kind, body, thread_id, reply_to, hop, idem_key, ts) VALUES(?,?,?,?,?,?,?,?,?,?)",
           id, me, toAgent, 'text', text, thread, body.reply_to || null, hop, idem, ts);
         const seq = this.sql.exec("SELECT seq FROM messages WHERE id=?", id).toArray()[0].seq;
         return j({ ok: true, msg: { seq, id, from: me, to: toAgent, ts } });
+      }
+
+      if (path === '/v2/redact' && method === 'POST') {
+        const m = this.sql.exec("SELECT id, from_agent FROM messages WHERE id=?", String(body.id || '')).toArray()[0];
+        if (!m) return j({ error: 'not found' }, 404);
+        if (!isAdmin && m.from_agent !== me) return j({ error: 'only the sender or admin may redact' }, 403);
+        this.sql.exec("UPDATE messages SET body='redacted', redacted_at=COALESCE(redacted_at, ?) WHERE id=?", Date.now(), m.id);
+        return j({ ok: true, id: m.id, redacted: true });
       }
 
       if (path === '/v2/inbox' && method === 'GET') {
@@ -488,6 +536,10 @@ export class RelayHub {
         const id = url.searchParams.get('id');
         const m = this.sql.exec("SELECT seq, to_agent FROM messages WHERE id=? AND from_agent=?", id, me).toArray()[0];
         if (!m) return j({ error: 'not found' }, 404);
+        if (m.to_agent === '__all__') {
+          const recipients = this.sql.exec("SELECT a.name AS agent, COALESCE(c.delivered_seq,0) >= ? AS delivered, COALESCE(c.acked_seq,0) >= ? AS read FROM agents a LEFT JOIN cursors c ON c.agent=a.name WHERE a.status='active' AND a.name != ? ORDER BY a.name", m.seq, m.seq, me).toArray();
+          return j({ id, to: m.to_agent, seq: m.seq, recipients: recipients.map(r => ({ agent: r.agent, delivered: !!r.delivered, read: !!r.read })) });
+        }
         const c = this.sql.exec("SELECT agent, delivered_seq, acked_seq FROM cursors WHERE agent=?", m.to_agent).toArray()[0];
         return j({ id, to: m.to_agent, seq: m.seq, delivered: c ? c.delivered_seq >= m.seq : false, read: c ? c.acked_seq >= m.seq : false });
       }
@@ -519,11 +571,13 @@ export class RelayHub {
         if (method === 'PUT') {
           if (me !== f.owner) return j({ error: 'forbidden' }, 403);
           if (f.status !== 'pending') return j({ error: 'already uploaded' }, 409);
-          const buf = await request.arrayBuffer();
+          const raw = await readCapped(request, f.size);
+          if (raw === null) return j({ error: 'file larger than declared size' }, 413);
+          const buf = raw.buffer;
           if (buf.byteLength !== f.size) return j({ error: 'size mismatch' }, 400);
           const head = new Uint8Array(buf.slice(0, 256));
-          const headTxt = new TextDecoder().decode(head).toLowerCase();
-          if (headTxt.startsWith('<!doctype html') || headTxt.startsWith('<svg') || headTxt.startsWith('#!') || headTxt.startsWith('<?php'))
+          const headTxt = new TextDecoder().decode(head).trimStart().toLowerCase();
+          if (['<!doctype html', '<html', '<script', '<svg', '#!', '<?php'].some(s => headTxt.startsWith(s)))
             return j({ error: 'content type not allowed' }, 415);
           if (head[0] === 0x7f && head[1] === 0x45) return j({ error: 'ELF executable not allowed' }, 415);
           if (head[0] === 0x4d && head[1] === 0x5a) return j({ error: 'PE executable not allowed' }, 415);
@@ -540,7 +594,7 @@ export class RelayHub {
           const obj = await this.env.RELAY_FILES.get(f.r2_key);
           if (!obj) return j({ error: 'gone' }, 410);
           return new Response(obj.body, { headers: {
-            'Content-Type': 'application/octet-stream', 'Content-Disposition': 'attachment; filename="' + f.name.replace(/"/g, '') + '"',
+            'Content-Type': 'application/octet-stream', 'Content-Disposition': "attachment; filename*=UTF-8''" + encodeURIComponent(f.name),
             'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' } });
         }
       }
@@ -556,7 +610,9 @@ export class RelayHub {
 
       return j({ error: 'not found' }, 404);
     } catch (e) {
-      return j({ error: 'internal', detail: String(e).slice(0, 200) }, 500);
+      // Never log the request or the error message: either could carry message content.
+      console.error('internal error', method, path.split('/').slice(0, 3).join('/'), e && e.name);
+      return j({ error: 'internal' }, 500);
     }
   }
 
@@ -577,13 +633,32 @@ export class RelayHub {
 
 import PAGE_HTML from './page.html';
 
+// Best effort: per-isolate, so it dampens floods of the public page rather than enforcing an exact quota.
+const pageHits = new Map();
+function pageAllowed(ip) {
+  const minute = Math.floor(Date.now() / 60000);
+  if (pageHits.size > 5000) pageHits.clear();
+  const h = pageHits.get(ip);
+  if (!h || h.minute !== minute) { pageHits.set(ip, { minute, n: 1 }); return true; }
+  return ++h.n <= PAGE_RATE_MAX;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === '/' && request.method === 'GET')
-      return new Response(PAGE_HTML, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+    if (url.pathname === '/' && request.method === 'GET') {
+      if (!pageAllowed(request.headers.get('CF-Connecting-IP') || 'local')) return new Response('rate limited', { status: 429, headers: { 'Retry-After': '60' } });
+      const nonce = crypto.randomUUID().replace(/-/g, '');
+      return new Response(PAGE_HTML.replaceAll('__CSP_NONCE__', nonce), { headers: {
+        'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
+        'Content-Security-Policy': "default-src 'none'; script-src 'nonce-" + nonce + "'; style-src 'nonce-" + nonce + "'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' } });
+    }
 
     if (url.pathname.startsWith('/v2/')) {
+      // Reject before waking the Durable Object. The DO re-checks actual bytes for chunked bodies.
+      const limit = url.pathname.endsWith('/content') ? MAX_FILE : MAX_JSON;
+      if (Number(request.headers.get('Content-Length') || 0) > limit) return j({ error: 'request body too large', max: limit }, 413);
       const id = env.RELAY_DO.idFromName('hub');
       return env.RELAY_DO.get(id).fetch(request);
     }
