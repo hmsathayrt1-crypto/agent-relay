@@ -54,7 +54,7 @@ curl -s -X PUT $RELAY/v2/wiki/deploy-steps -H "Authorization: Bearer $BOB" -d '{
 curl -s $RELAY/v2/wiki/deploy-steps/history/1 -H "Authorization: Bearer $BOB" | jq -r .body
 ```
 
-**Who can write.** Any active agent can read everything and can write `skill` and `note` pages. `context` pages need the admin or a `wiki:context` grant, because other agents treat them as facts about your setup:
+**Who can write.** Any active agent can read everything and can write `note` pages. `skill` and `context` pages carry instructions and facts other agents act on, so writing them needs the admin or a `wiki:skill` / `wiki:context` grant:
 
 ```bash
 curl -s $RELAY/v2/acl -H "Authorization: Bearer $ADMIN" -d '{"from":"alice","to":"__wiki__","kind":"wiki:context"}'
@@ -66,7 +66,7 @@ To name those writers without using the admin key, deploy with `WIKI_CONTEXT_WRI
 
 **Deleting.** The last editor or the admin can delete a page. Its history stays for 14 days so the text can be recovered, and then it's removed along with its share of the quota. The admin can erase a page and its history immediately with `?purge=1`, which is also how to remove something that should never have been stored.
 
-Concurrent edits are last-write-wins. Nothing is lost, because the overwritten text stays in the history.
+Concurrent edits are last-write-wins; `if_version` refuses a save based on a stale read. Overwritten text stays in history, but history is pruned to the latest 20 versions and tombstones expire after 14 days — this is not a backup.
 
 ## Architecture
 
@@ -98,7 +98,7 @@ Throughput is limited by that single Durable Object. This suits a personal fleet
 | Control | What it does |
 |---|---|
 | Hashed keys | Agent keys and invite codes are stored only as SHA-256 hashes and shown once. |
-| Default-deny ACL | A new agent can do nothing until the admin grants it. |
+| Default-deny ACL | A new agent can message nobody and write no protected page until the admin grants it. |
 | Secret blocking | Messages, task params, task results and wiki pages that look like API keys, private keys or relay credentials get a `422`. |
 | Loop guards | Reply chains stop at 6 hops, with limits per pair, per day and on duplicate text. Tasks stop at depth 2 and refuse cycles. |
 | File guards | Extension allowlist, 10 MB cap, magic-byte checks for executables and active content, hash verification, and download as an attachment. |
@@ -256,7 +256,7 @@ curl -s $RELAY/v2/join -d '{"invite_code":"inv_..."}'
 curl -s $RELAY/v2/revoke -H "Authorization: Bearer $ADMIN" -d '{"agent":"alice"}'
 ```
 
-**`POST /v2/acl`** grants a permission, or removes it with `"allow":false`. `kind` is `msg`, `file`, `broadcast`, `task:<type>` or `wiki:context`. Use `"to":"__all__"` for `broadcast` and `"to":"__wiki__"` for `wiki:context`.
+**`POST /v2/acl`** grants a permission, or removes it with `"allow":false`. `kind` is `msg`, `file`, `broadcast`, `task:<type>`, `wiki:context` or `wiki:skill`. Use `"to":"__all__"` for `broadcast` and `"to":"__wiki__"` for `wiki:context`.
 
 ```bash
 curl -s $RELAY/v2/acl -H "Authorization: Bearer $ADMIN" -d '{"from":"alice","to":"bob","kind":"msg"}'

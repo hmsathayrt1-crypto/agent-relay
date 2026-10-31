@@ -74,6 +74,7 @@ const MAX_WIKI_BODY = 100 * 1024;
 const MAX_WIKI_REQUEST = 3 * MAX_WIKI_BODY + 4096;
 const MAX_WIKI_PAGES = 200;
 const MAX_WIKI_BYTES = 5 * 1024 * 1024;
+const WIKI_AGENT_DAILY_BYTES = 100 * 1024;
 const WIKI_RATE_MAX = 60;
 const WIKI_HISTORY_KEEP = 20;
 const WIKI_TOMBSTONE_MS = 14 * 86400 * 1000;
@@ -87,7 +88,7 @@ const RESERVED_NAMES = ['__admin__', '__all__', WIKI_ACL_TO];
 const hasSecret = (s) => SECRET_PATTERNS.some(p => p.test(s));
 const byteLen = (s) => new TextEncoder().encode(s).length;
 const cleanLine = (s) => s.replace(/[\u0000-\u001f\u202e]/g, '').trim();
-const aclOk = (to, k) => k === 'wiki:context' ? to === WIKI_ACL_TO : ['msg', 'file', 'broadcast'].includes(k) || /^task:[a-z0-9_.-]{1,64}$/.test(String(k));
+const aclOk = (to, k) => k === 'wiki:context' || k === 'wiki:skill' ? to === WIKI_ACL_TO : ['msg', 'file', 'broadcast'].includes(k) || /^task:[a-z0-9_.-]{1,64}$/.test(String(k));
 const isFileContent = (path) => /^\/v2\/files\/[a-z0-9]+\/content$/.test(path);
 const jsonCap = (path, method) => method === 'PUT' && path.startsWith('/v2/wiki/') ? MAX_WIKI_REQUEST : MAX_JSON;
 
@@ -144,6 +145,7 @@ export class RelayHub {
     this.sql = state.storage.sql;
     this.leaseMs = Number(env.LEASE_MS) || LEASE_MS;
     this.wikiTombstoneMs = Number(env.WIKI_TOMBSTONE_MS) || WIKI_TOMBSTONE_MS;
+    this.wikiAgentDailyBytes = Number(env.WIKI_AGENT_DAILY_BYTES) || WIKI_AGENT_DAILY_BYTES;
     state.blockConcurrencyWhile(async () => {
       this._migrate();
       if (await state.storage.getAlarm() === null) await state.storage.setAlarm(Date.now() + 60_000);
@@ -207,6 +209,15 @@ export class RelayHub {
     if (this.env.ADMIN_KEY && h === await sha256hex(this.env.ADMIN_KEY)) return '__admin__';
     const r = this.sql.exec("SELECT name, status FROM agents WHERE key_hash=? AND status='active'", h).toArray()[0];
     return r ? r.name : null;
+  }
+
+  _bumpAdd(scope, windowMs, max, add) {
+    const w = Math.floor(Date.now() / windowMs);
+    const cur = this.sql.exec("SELECT n FROM counters WHERE scope=? AND window=?", scope, w).toArray()[0];
+    const n = cur ? cur.n : 0;
+    if (n + add > max) return false;
+    this.sql.exec("INSERT INTO counters(scope,window,n) VALUES(?,?,?) ON CONFLICT(scope,window) DO UPDATE SET n=n+?", scope, w, add, add);
+    return true;
   }
 
   _bump(scope, windowMs, max) {
@@ -458,8 +469,9 @@ export class RelayHub {
     });
   }
 
-  _canWriteContext(me, isAdmin) {
-    return isAdmin || !!this.sql.exec("SELECT 1 FROM acl WHERE from_agent=? AND to_agent=? AND kind='wiki:context'", me, WIKI_ACL_TO).toArray()[0];
+  _canWriteContext(me, isAdmin) { return this._canWriteKind(me, isAdmin, 'wiki:context'); }
+  _canWriteKind(me, isAdmin, kind) {
+    return isAdmin || !!this.sql.exec("SELECT 1 FROM acl WHERE from_agent=? AND to_agent=? AND kind=?", me, WIKI_ACL_TO, kind).toArray()[0];
   }
 
   _wiki(url, path, method, me, isAdmin, body) {
@@ -523,8 +535,12 @@ export class RelayHub {
       const tags = wikiTags(body.tags === undefined ? (cur ? JSON.parse(cur.tags) : []) : body.tags);
       if (!tags) return j({ error: 'tags must be up to 8 strings of up to 30 characters' }, 400);
       const tags_json = JSON.stringify(tags);
-      // Checking both kinds stops anyone from rewriting a context page by relabelling it as a note.
-      if ((kind === 'context' || (cur && cur.kind === 'context')) && !this._canWriteContext(me, isAdmin)) return j({ error: 'context pages need the admin or the wiki:context grant' }, 403);
+      // Checking both kinds stops anyone from rewriting a protected page by relabelling it as a note.
+      if ((kind === 'context' || (cur && cur.kind === 'context')) && !this._canWriteContext(me, isAdmin))
+        return j({ error: 'context pages need the admin or the wiki:context grant' }, 403);
+      // skill pages carry executable instructions: writes need the wiki:skill grant too.
+      if ((kind === 'skill' || (cur && cur.kind === 'skill')) && !this._canWriteKind(me, isAdmin, 'wiki:skill'))
+        return j({ error: 'skill pages need the admin or the wiki:skill grant' }, 403);
       if ([slug, title, tags_json, text].some(s => this._leaks(s)))
         return j({ error: 'rejected: looks like a secret — pass a reference instead' }, 422);
       // A retry of a write that already landed adds no version, burns no quota and does not take over the page.
@@ -535,6 +551,8 @@ export class RelayHub {
       if (!cur && quota.pages >= MAX_WIKI_PAGES) return j({ error: 'wiki page limit reached', max: MAX_WIKI_PAGES }, 413);
       if (quota.bytes + size > MAX_WIKI_BYTES) return j({ error: 'wiki storage quota reached', max: MAX_WIKI_BYTES, bytes: quota.bytes }, 413);
       if (!isAdmin && !this._bump('wiki:' + me, 3600 * 1000, WIKI_RATE_MAX)) return j({ error: 'rate limit: too many wiki writes', max: WIKI_RATE_MAX }, 429);
+      if (!isAdmin && !this._bumpAdd('wikibytes:' + me, 24 * 3600 * 1000, this.wikiAgentDailyBytes, size))
+        return j({ error: 'daily wiki byte quota exceeded for your agent', max: WIKI_AGENT_DAILY_BYTES }, 429);
       // A deleted slug keeps counting up, so old history rows are never overwritten.
       const version = (cur ? cur.version : this.sql.exec("SELECT COALESCE(MAX(version),0) AS m FROM wiki_history WHERE slug=?", slug).toArray()[0].m) + 1;
       const updated_at = Date.now();
@@ -624,8 +642,19 @@ export class RelayHub {
         return j({ ok: true, agent: name, invite_code: code, expires_at }); // shown ONCE
       }
       if (path === '/v2/revoke' && isAdmin && method === 'POST') {
-        this.sql.exec("UPDATE agents SET status='revoked', revoked_at=? WHERE name=?", Date.now(), String(body.agent || ''));
+        const name = String(body.agent || '');
+        this.sql.exec("UPDATE agents SET status='revoked', revoked_at=? WHERE name=?", Date.now(), name);
+        // A revoked agent's open tasks must not linger or become claimable.
+        this.sql.exec("UPDATE tasks SET status='rejected', error='agent revoked', lease_token=NULL, lease_until=NULL WHERE (from_agent=? OR to_agent=?) AND status IN ('awaiting_approval','pending','leased')", name, name);
         return j({ ok: true });
+      }
+      if (path === '/v2/rotate' && isAdmin && method === 'POST') {
+        const name = String(body.agent || '').trim().toLowerCase();
+        if (!NAME_RE.test(name) || RESERVED_NAMES.includes(name)) return j({ error: 'invalid agent name' }, 400);
+        if (!this.sql.exec("SELECT 1 FROM agents WHERE name=?", name).toArray()[0]) return j({ error: 'unknown agent' }, 404);
+        const key = 'ark_' + crypto.randomUUID().replace(/-/g, '');
+        this.sql.exec("UPDATE agents SET key_hash=? WHERE name=?", await sha256hex(key), name);
+        return j({ ok: true, agent: name, key }); // shown ONCE
       }
       if (path === '/v2/acl' && isAdmin && method === 'POST') {
         const { from, to, kind, allow } = body;
@@ -756,7 +785,9 @@ export class RelayHub {
       // ---------- files ----------
       if (path === '/v2/files' && method === 'POST') {
         const to = String(body.to || '');
-        const name = String(body.name || 'file').replace(/[\u0000-\u001f\u202e]/g, '');
+        const rawName = String(body.name || 'file').replace(/[\u0000-\u001f\u202e]/g, '');
+        if (rawName.includes('/') || rawName.includes('\\') || rawName.includes('..')) return j({ error: 'file name must be a basename' }, 400);
+        const name = rawName.split('/').pop();
         const size = Number(body.size || 0);
         const sha = String(body.sha256 || '');
         if (name.length > 200) return j({ error: 'file name too long', max: 200 }, 400);

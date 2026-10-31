@@ -1,0 +1,21 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # migration.sh needs real history to pick v1 correctly
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install wrangler
+        run: npm install -g wrangler@^4
+      - name: Smoke tests (local relay)
+        run: bash test/smoke.sh
+      - name: Migration tests
+        run: bash test/migration.sh

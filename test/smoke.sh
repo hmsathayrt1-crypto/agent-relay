@@ -8,7 +8,7 @@ trap 'stop_relay; rm -rf "$TMP"' EXIT
 
 ADMIN="smoke-admin-$RANDOM$RANDOM"
 PORT=${PORT:-$((18000 + RANDOM % 2000))}
-start_relay "$ROOT" wrangler.example.toml "$TMP/state" "$PORT" "$ADMIN" 2000 || exit 1
+start_relay "$ROOT" wrangler.example.toml "$TMP/state" "$PORT" "$ADMIN" 2000 WIKI_AGENT_DAILY_BYTES:10485760 || exit 1
 
 join() { api POST /v2/join "$ADMIN" "{\"agent\":\"$1\"}"; field .key; }
 acl() { api POST /v2/acl "$ADMIN" "{\"from\":\"$1\",\"to\":\"$2\",\"kind\":\"$3\"}"; }
@@ -250,6 +250,7 @@ api GET /v2/wiki/busy/history "$A"; eq "history lists the latest 20" "$(field '.
 expect "  pruned version is gone" 404 GET /v2/wiki/busy/history/1 "$A"; expect "  kept version loads" 200 GET /v2/wiki/busy/history/4 "$A"; eq "    with the right body" "$(field .body)" 'rev 4'
 
 echo "== wiki: list and search"
+acl alice __wiki__ wiki:skill
 expect "english page" 200 PUT /v2/wiki/deploy-steps "$A" "$(page 'Deploy Steps' skill 'run wrangler deploy, then 100% check' '["DevOps","release"]')"
 slugs() { jq -c '[.pages[].slug] | sort' <<<"$out"; }
 expect "arabic search in the body, percent-encoded" 200 GET "/v2/wiki?q=$(uri 'نسخة')" "$A"; eq "  finds it" "$(slugs)" '["tasks-guide"]'
@@ -405,7 +406,7 @@ eq "page flood is 429" "$pc" 429
 echo "== page in jsdom against hostile data"
 node "$ROOT/test/page-check.mjs" && ok "page script passes" || no "page script passes"
 
-echo "== wiki: deleted history expires (WIKI_TOMBSTONE_MS=1000 in this relay)"
+echo "== wiki: deleted history expires (WIKI_AGENT_DAILY_BYTES=10485760 WIKI_TOMBSTONE_MS=1000 in this relay)"
 stop_relay; sleep 1
 start_relay "$ROOT" wrangler.example.toml "$TMP/state2" "$PORT" "$ADMIN" 1000 WIKI_TOMBSTONE_MS:1000 || exit 1
 A2=$(join sweeper); B2=$(join sweep-exec)
