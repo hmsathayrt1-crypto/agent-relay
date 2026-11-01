@@ -3,22 +3,43 @@
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#f7f6f2">
 <title>Agent Relay</title><style nonce="__CSP_NONCE__">
-:root{color-scheme:light;--bg:#f7f6f2;--surface:#fff;--ink:#1a1d21;--muted:#5c636c;--line:#e2e0d8;--accent:#0b6e5f;--accent-dark:#085548;--accent-soft:#e0f2ed;--danger:#b3261e;--danger-soft:#fcecea;--warn:#92400e;--warn-soft:#fdf0d8;--tap:44px;--r:12px}
+:root{color-scheme:light;--bg:#f7f6f2;--surface:#fff;--ink:#1a1d21;--muted:#5c636c;--line:#e2e0d8;--accent:#0b6e5f;--accent-dark:#085548;--accent-soft:#e0f2ed;--danger:#b3261e;--danger-soft:#fcecea;--warn:#92400e;--warn-soft:#fdf0d8;--tap:44px;--r:12px;--ease:cubic-bezier(.2,.75,.3,1);--c:#5c636c;--cs:#f1f0ea;--cl:#e2e0d8}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html,body{height:100%;margin:0;overflow:hidden;background:var(--bg)}
+html,body,#root{height:100%;margin:0;overflow:hidden;background:var(--bg)}
 body{color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI","SF Arabic","Noto Sans Arabic","Noto Naskh Arabic",Tahoma,sans-serif;-webkit-text-size-adjust:100%}
 .screen{height:100%;display:flex;flex-direction:column;width:100%;max-width:760px;margin-inline:auto;background:var(--bg)}
 @supports (height:100dvh){.screen{height:var(--app-h,100dvh)}}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 
+/* One colour per agent. Each --c passes AA against white and against its own --cs, and page-check holds it to that. */
+.c0{--c:#0b6e5f;--cs:#e6f4f0;--cl:#bfe3d9}
+.c1{--c:#1f5fa6;--cs:#e8f0fa;--cl:#c5d9f0}
+.c2{--c:#b03a22;--cs:#fbece8;--cl:#f2cfc6}
+.c3{--c:#855600;--cs:#fbf2dd;--cl:#eedcae}
+.c4{--c:#3a7420;--cs:#edf5e6;--cl:#cfe5bf}
+.c5{--c:#b3265a;--cs:#fbe9f0;--cl:#f2c8d8}
+.c6{--c:#0a6a8c;--cs:#e4f2f7;--cl:#bddfea}
+.c7{--c:#62670f;--cs:#f3f4dd;--cl:#dfe1ae}
+.c8{--c:#ab470b;--cs:#fcefe4;--cl:#f3d4bb}
+.c9{--c:#44586b;--cs:#edf1f4;--cl:#d0dae2}
+.c10{--c:#7a4b2e;--cs:#f6eee8;--cl:#e4d2c5}
+.c11{--c:#25457a;--cs:#e9edf6;--cl:#c8d3e8}
+.av{flex:none;display:block}
+.av circle{fill:var(--c)}
+.av text{fill:#fff;font-family:inherit;font-size:15px;font-weight:700}
+.av text.two{font-size:12px}
+.nm{color:var(--c);font-weight:600}
+.ag{display:inline-flex;align-items:center;gap:5px;vertical-align:middle;max-width:100%;min-width:0}
+.ag .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 /* Controls. 16px text keeps iOS from zooming the page on focus. */
-button,input,select,textarea{font:inherit;color:inherit;border-radius:var(--r)}
-input,select,textarea{width:100%;min-height:var(--tap);background:var(--surface);border:1px solid var(--line);padding:9px 12px;font-size:16px}
-input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+button,input,textarea{font:inherit;color:inherit;border-radius:var(--r)}
+input,textarea{width:100%;min-height:var(--tap);background:var(--surface);border:1px solid var(--line);padding:9px 12px;font-size:16px}
+input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
 textarea{display:block;resize:none;line-height:1.5}
 label{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
-button{min-height:var(--tap);padding:0 16px;border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background-color .12s,transform .08s}
+button{min-height:var(--tap);padding:0 16px;border:1px solid var(--line);background:var(--surface);font-weight:600;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:background-color .15s,border-color .15s,color .15s,transform .15s}
 button:active{transform:scale(.98);background:var(--bg)}
 button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 button:disabled{opacity:.45;cursor:default;transform:none}
@@ -33,9 +54,9 @@ button.quiet:active{background:var(--line)}
 @media (hover:hover){button:hover:not(:disabled){background:var(--bg)}button.primary:hover:not(:disabled),button.approve:hover:not(:disabled){background:var(--accent-dark)}button.reject:hover:not(:disabled){background:var(--danger-soft)}button.quiet:hover:not(:disabled){background:var(--line)}}
 
 /* Login */
-#login-view{justify-content:center;padding:24px max(20px,env(safe-area-inset-right)) 24px max(20px,env(safe-area-inset-left))}
-#login-view h1{margin:0;font-size:28px;line-height:1.2;direction:ltr;text-align:end;letter-spacing:-.01em}
-#login-view p{margin:6px 0 24px;color:var(--muted)}
+#login-view,#boot{justify-content:center;padding:24px max(20px,env(safe-area-inset-right)) 24px max(20px,env(safe-area-inset-left))}
+#login-view h1,#boot h1{margin:0;font-size:28px;line-height:1.2;direction:ltr;text-align:end;letter-spacing:-.01em}
+#login-view p,#boot p{margin:6px 0 24px;color:var(--muted)}
 #login-view p.msg{margin:12px 0 0;color:var(--danger)}
 #key{direction:ltr;margin-bottom:12px}
 #login{width:100%;min-height:52px;font-size:17px}
@@ -43,7 +64,7 @@ button.quiet:active{background:var(--line)}
 /* Header and tabs */
 header{display:flex;align-items:center;gap:8px;padding:max(6px,env(safe-area-inset-top)) 16px 6px;min-height:52px}
 header b{font-size:17px;direction:ltr;letter-spacing:-.01em}
-#who{margin-inline-start:auto;font-size:14px;color:var(--muted);direction:ltr;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#who{margin-inline-start:auto;font-size:14px;max-width:45%;display:flex;min-width:0}
 nav{display:flex;border-bottom:1px solid var(--line);padding-inline:8px}
 nav button{flex:1;min-height:50px;padding:0 4px;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;color:var(--muted);font-size:16px;display:flex;align-items:center;justify-content:center;gap:6px}
 nav button:active{transform:none;background:transparent}
@@ -51,40 +72,121 @@ nav button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent
 @media (hover:hover){nav button:hover:not(:disabled){background:transparent;color:var(--ink)}}
 .badge{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--danger);color:#fff;font-size:13px;line-height:22px;text-align:center}
 #net{background:var(--warn-soft);color:var(--warn);font-size:14px;padding:6px 16px}
-.panel{flex:1;min-height:0;display:flex;flex-direction:column}
+.panel{flex:1;min-height:0;display:flex;flex-direction:column;animation:panel-in .2s var(--ease)}
 .scroll{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:12px 16px}
 .empty{color:var(--muted);text-align:center;margin:40px 16px}
 .msg{font-size:14px;color:var(--danger);margin:0;padding:0 2px}
 .msg:empty{display:none}
 
-/* Chat */
-#log{display:flex;flex-direction:column;gap:8px}
-.m{max-width:86%;padding:8px 12px;border-radius:14px;border:1px solid var(--line);background:var(--surface);align-self:flex-end}
-.m.mine{align-self:flex-start;background:var(--accent-soft);border-color:#c5e6dd}
-.m .h{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);line-height:1.3;min-height:20px}
-.m .h .t{margin-inline-start:auto;white-space:nowrap}
-.m .b{white-space:pre-wrap;overflow-wrap:anywhere;unicode-bidi:plaintext}
-/* The tap area is 44px, and the negative margin stops it from making every bubble taller. */
-.m button.copy{min-height:var(--tap);margin-block:-12px;margin-inline-end:-8px;padding:0 8px;font-size:13px;font-weight:500}
-#jump{position:absolute;bottom:8px;inset-inline-start:50%;transform:translateX(50%);min-height:40px;border-radius:20px;background:var(--ink);border-color:var(--ink);color:#fff;font-size:14px;z-index:1}
+/* Chat. The page is RTL, so a row starts on the right and a reversed row starts on the left. */
+#log{display:flex;flex-direction:column;gap:16px}
+.m{display:flex;align-items:flex-start;gap:8px}
+.m.mine{flex-direction:row}
+.m.other{flex-direction:row-reverse}
+.m.enter{animation:bubble-in .22s var(--ease) both}
+.mc{min-width:0;max-width:min(84%,600px);display:flex;flex-direction:column}
+.mine .mc{align-items:flex-start}
+.other .mc{align-items:flex-end}
+.m .h{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;color:var(--muted);line-height:1.3;min-height:20px;margin-bottom:4px;padding-inline:2px}
+.m .h .t{white-space:nowrap}
+.w .nm{font-weight:700;font-size:14px}
+.bw{display:flex;align-items:flex-end;gap:6px;max-width:100%;min-width:0}
+.other .bw{flex-direction:row-reverse}
+.bb{min-width:0;background:var(--cs);border:1px solid var(--cl);border-radius:16px;padding:10px 14px}
+.mine .bb{border-start-start-radius:4px}
+.other .bb{border-start-end-radius:4px}
+.b{font-size:16px;line-height:1.7}
+/* Small to the eye, and an invisible layer brings the tap area up to 44px. */
+.tapx{position:relative}
+.tapx::after{content:"";position:absolute;inset:-8px -4px}
+.m button.copy{min-height:0;padding:0 6px;font-size:13px;font-weight:500;line-height:1.5}
+button.rep{flex:none;min-height:30px;min-width:40px;padding:0 9px;border-radius:15px;border-color:var(--cl);background:var(--surface);color:var(--c);font-size:14px;font-weight:700;direction:ltr;animation:rep-in .2s var(--ease)}
+button.rep[aria-expanded=true]{background:var(--c);border-color:var(--c);color:#fff}
+.ok{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px;padding-inline:2px;font-size:13px;color:var(--muted)}
+.ok .tick{color:var(--accent);font-weight:700}
+.copies{list-style:none;margin:6px 0 0;padding:6px 10px;background:var(--surface);border:1px solid var(--cl);border-radius:12px;font-size:13px;color:var(--muted);align-self:stretch;animation:panel-in .18s var(--ease)}
+.copies li{display:flex;align-items:center;gap:8px;min-height:28px;flex-wrap:wrap}
+.copies .ct{direction:ltr;unicode-bidi:isolate;white-space:nowrap}
+#jump{position:absolute;bottom:8px;inset-inline-start:50%;transform:translateX(50%);min-height:40px;border-radius:20px;background:var(--ink);border-color:var(--ink);color:#fff;font-size:14px;z-index:1;animation:toast-in .2s var(--ease)}
 #jump:active{transform:translateX(50%);background:var(--ink)}
 #chat .stage{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
-#bar{border-top:1px solid var(--line);background:var(--surface);padding:8px 12px max(8px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px}
+#bar{border-top:2px solid var(--c);background:var(--surface);padding:8px 12px max(8px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;transition:border-color .18s}
 #bar .to{display:flex;align-items:center;gap:8px}
-#bar .to label{margin:0;color:var(--muted);font-weight:500}
-#to{flex:1;min-width:0;background:var(--bg)}
+#bar .to>label{margin:0;color:var(--muted);font-weight:500}
 #bar .write{display:flex;align-items:flex-end;gap:8px}
-#txt{flex:1;width:auto;min-width:0;max-height:132px;overflow-y:auto;background:var(--bg);unicode-bidi:plaintext}
+#txt{flex:1;width:auto;min-width:0;max-height:132px;overflow-y:auto;background:var(--bg);border-color:var(--cl);unicode-bidi:plaintext;transition:border-color .18s}
+#txt:focus{outline-color:var(--c);border-color:var(--c)}
 #send{flex:none;padding:0 20px}
+.hints{display:flex;flex-wrap:wrap;gap:6px;animation:panel-in .16s var(--ease)}
+button.hint{min-height:36px;padding:0 10px 0 6px;border-radius:18px;background:var(--cs);border-color:var(--cl);font-weight:500}
+
+/* Rendered Markdown. Each block sets its own direction, so Arabic and English paragraphs sit side by side. */
+.md{overflow-wrap:anywhere;min-width:0}
+.md.plain{white-space:pre-wrap;unicode-bidi:plaintext}
+.md>:first-child{margin-top:0}
+.md>:last-child{margin-bottom:0}
+.md p{margin:0 0 .6em}
+.md h1,.md h2,.md h3,.md h4,.md h5,.md h6{margin:.9em 0 .4em;line-height:1.35;font-weight:700}
+.md h1{font-size:1.32em}
+.md h2{font-size:1.2em}
+.md h3{font-size:1.08em}
+.md h4,.md h5,.md h6{font-size:1em}
+/* Both sides, because an English item in an Arabic list puts its marker on the far side. */
+.md ul,.md ol{margin:0 0 .6em;padding-inline:1.4em}
+.md li+li{margin-top:.2em}
+.md blockquote{margin:0 0 .6em;padding-inline-start:.8em;border-inline-start:3px solid var(--line);color:var(--muted)}
+.md a{color:var(--accent-dark);text-decoration:underline;text-underline-offset:2px}
+.md hr{border:0;border-top:1px solid var(--line);margin:.9em 0}
+.md code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;background:rgba(26,29,33,.07);border-radius:5px;padding:.1em .35em}
+.md pre{margin:0 0 .6em;padding:10px 12px;background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:10px;overflow-x:auto;text-align:left;line-height:1.5}
+.md pre code{display:block;background:transparent;padding:0;font-size:.88em;white-space:pre;overflow-wrap:normal}
+.md .tw{overflow-x:auto;margin:0 0 .6em}
+.md table{border-collapse:collapse;font-size:.94em}
+/* Without this a narrow table squeezes words down to one letter per line instead of scrolling. */
+.md th,.md td{border:1px solid var(--line);padding:6px 10px;overflow-wrap:normal;min-width:5ch}
+.md th:not([align]),.md td:not([align]){text-align:start}
+.md th{background:rgba(26,29,33,.04);font-weight:700}
+button.rawbtn{min-height:0;margin-top:6px;padding:0 4px;border:0;background:transparent;color:var(--warn);font-size:13px;font-weight:500;line-height:1.5}
+
+/* Combobox: the one list control on this page */
+.cb{position:relative;flex:1;min-width:0}
+button.cb-t{width:100%;display:flex;align-items:center;gap:8px;padding:0 10px;text-align:start;font-weight:500;background:var(--bg)}
+button.cb-t:active{transform:none}
+.cb-v{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cb-t.tone .cb-v{color:var(--c);font-weight:600}
+.cb-c{flex:none;color:var(--muted);transition:transform .18s var(--ease)}
+.cb-t[aria-expanded=true] .cb-c{transform:rotate(180deg)}
+.cb-p{position:absolute;inset-inline:0;z-index:4;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 28px rgba(26,29,33,.14);overflow:hidden;animation:cb-in .16s var(--ease) both}
+.cb-p.dn{top:calc(100% + 6px);transform-origin:top}
+.cb-p.up{bottom:calc(100% + 6px);transform-origin:bottom}
+.cb-p.out{animation:cb-out .15s ease-in both;pointer-events:none}
+input.cb-s{flex:none;border:0;border-bottom:1px solid var(--line);border-radius:0;background:var(--surface)}
+input.cb-s:focus{outline:0;border-color:var(--accent)}
+.cb-l{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:6px;position:relative}
+.cb-o{display:flex;align-items:center;gap:10px;min-height:var(--tap);padding:6px 10px;border-radius:10px;cursor:pointer;transition:background-color .15s}
+.cb-o.on{background:var(--accent-soft)}
+.cb-o[aria-selected=true] .cb-ol{font-weight:700}
+.cb-o[aria-disabled=true]{opacity:.45;cursor:default}
+.cb-o[aria-disabled=true].on{background:var(--bg)}
+.cb-ol{min-width:0;overflow-wrap:anywhere}
+.cb-o.tone .cb-ol{color:var(--c);font-weight:600}
+.cb-h{display:block;font-size:13px;color:var(--muted);font-weight:400;overflow-wrap:anywhere}
+.cb-k{margin-inline-start:auto;color:var(--accent);font-weight:700}
+.cb-none{padding:12px;text-align:center;color:var(--muted);font-size:14px}
 
 /* Wiki */
-#wbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-#wq{flex:1 1 100%}
-#wkind{flex:1;width:auto;min-width:0}
-#wlist{display:flex;flex-direction:column;gap:8px}
+#wbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+#wbar .wide{grid-column:1/-1}
+#wbar .cb{flex:none}
+#wsearch{display:flex;gap:8px}
+#wq{flex:1;width:auto;min-width:0}
+#wnew{flex:none;padding:0 12px}
+#wlist{display:flex;flex-direction:column;gap:8px;transition:opacity .15s}
+#wlist.busy{opacity:.55}
 button.wi{display:block;width:100%;min-height:60px;padding:10px 14px;text-align:start;font-weight:400;line-height:1.45}
 .wi .t{display:block;font-weight:600;overflow-wrap:anywhere}
 .wi .d{display:block;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.wi .by{display:block;margin-top:4px;font-size:13px}
 #wquota{font-size:13px;color:var(--muted);text-align:center;margin:14px 0 2px}
 #wmsg{margin-bottom:10px}
 #wmsg.info{color:var(--warn)}
@@ -93,11 +195,9 @@ button.wi{display:block;width:100%;min-height:60px;padding:10px 14px;text-align:
 #wtitle{margin:12px 0 6px;font-size:22px;line-height:1.3;overflow-wrap:anywhere}
 .chip{display:inline-block;background:var(--line);border-radius:7px;padding:1px 8px;margin-inline-end:4px;margin-bottom:4px;font-size:13px}
 .chip.badge2{background:var(--warn-soft);color:var(--warn)}
-#wmeta{display:block;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
-#wbody{white-space:pre-wrap;overflow-wrap:anywhere;unicode-bidi:plaintext;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:12px 0;font:inherit;line-height:1.7}
-#whistbox summary{min-height:var(--tap);display:flex;align-items:center;cursor:pointer;font-weight:600}
-#whist{display:flex;flex-direction:column;gap:6px}
-#whist button{width:100%;text-align:start;font-weight:400;font-size:14px;padding:8px 12px;overflow-wrap:anywhere}
+#wmeta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+#wbody{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin:12px 0 0;font-size:16px;line-height:1.75}
+#whistbox{margin-top:14px}
 #wform{display:flex;flex-direction:column;gap:12px}
 #fbody{min-height:40dvh;resize:vertical;unicode-bidi:plaintext}
 #fslug{direction:ltr}
@@ -106,9 +206,9 @@ button.wi{display:block;width:100%;min-height:60px;padding:10px 14px;text-align:
 #wform .acts button{flex:1}
 
 /* Approvals */
-.task{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.task{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px;animation:bubble-in .22s var(--ease) both}
 .task .ty{font-size:18px;font-weight:700;direction:ltr;text-align:end;overflow-wrap:anywhere}
-.task .wh{font-size:14px;color:var(--muted);margin:2px 0 8px;overflow-wrap:anywhere}
+.task .wh{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;font-size:14px;color:var(--muted);margin:2px 0 8px;overflow-wrap:anywhere}
 .task pre{direction:ltr;text-align:left;background:var(--bg);border-radius:8px;padding:10px;margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
 .task .sha{direction:ltr;text-align:left;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .task .acts{display:flex;gap:8px;margin-top:12px}
@@ -116,87 +216,71 @@ button.wi{display:block;width:100%;min-height:60px;padding:10px 14px;text-align:
 .task .q{font-weight:600;margin:12px 0 0}
 .task .msg{margin-top:8px}
 
+/* Skeleton */
+.sk{display:block;background:linear-gradient(90deg,#ebe9e1 25%,#f4f3ed 50%,#ebe9e1 75%);background-size:300% 100%;border-radius:10px;animation:shimmer 1.4s linear infinite}
+.sk-chat{display:flex;flex-direction:column;gap:18px}
+.sk-m{display:flex;gap:8px;align-items:flex-start;flex-direction:row-reverse}
+.sk-m.r{flex-direction:row}
+.sk-a{flex:none;width:34px;height:34px;border-radius:50%}
+.sk-b{height:56px;width:58%}
+.sk-m.r .sk-b{width:44%;height:40px}
+.sk-cards{display:flex;flex-direction:column;gap:8px}
+.sk-c{height:74px}
+.sk-lines{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.sk-l{height:16px}
+.sk-l.t{height:26px;width:60%}
+.sk-l.s{width:72%}
+
 /* Toast */
-#toast{position:fixed;top:calc(env(safe-area-inset-top) + 8px);inset-inline:16px;margin-inline:auto;max-width:440px;background:var(--ink);border-color:var(--ink);color:#fff;font-weight:500;z-index:5}
+#toast{position:fixed;top:calc(env(safe-area-inset-top) + 8px);inset-inline:16px;margin-inline:auto;max-width:440px;background:var(--ink);border-color:var(--ink);color:#fff;font-weight:500;z-index:5;animation:toast-in .2s var(--ease)}
 #toast:active{background:var(--ink)}
 @media (hover:hover){#toast:hover:not(:disabled){background:var(--ink)}}
 .offscreen{position:fixed;top:0;inset-inline-start:-9999px;font-size:16px}
-@media (prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}
+
+@keyframes panel-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes bubble-in{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes rep-in{from{transform:scale(.8)}to{transform:none}}
+@keyframes toast-in{from{opacity:0}to{opacity:1}}
+@keyframes cb-in{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes cb-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-3px) scale(.985)}}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}button:active{transform:none}}
 </style></head><body>
 
-<main id="login-view" class="screen">
-<h1>Agent Relay</h1>
-<p>قناة وكلائك. أدخل مفتاحك للمتابعة.</p>
-<label for="key">المفتاح</label>
-<input id="key" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" enterkeyhint="go">
-<button id="login" class="primary">دخول</button>
-<p id="login-msg" class="msg" role="alert"></p>
-</main>
+<div id="root"><main id="boot" class="screen"><h1>Agent Relay</h1><p id="boot-msg" role="status">جارٍ التحميل…</p></main></div>
 
-<div id="app-view" class="screen" hidden>
-<header><b>Agent Relay</b><span id="who"></span><button id="logout" class="quiet">خروج</button></header>
-<nav role="tablist" aria-label="الأقسام">
-<button id="tab-chat" role="tab" aria-controls="chat" aria-selected="true">شات <span id="badge-chat" class="badge" hidden></span></button>
-<button id="tab-wiki" role="tab" aria-controls="wiki" aria-selected="false">ويكي</button>
-<button id="tab-approvals" role="tab" aria-controls="approvals" aria-selected="false" hidden>موافقات <span id="badge-approvals" class="badge" hidden></span></button>
-</nav>
-<div id="net" role="status" hidden>تعذر الاتصال. تجري إعادة المحاولة…</div>
-
-<section id="chat" class="panel" role="tabpanel" aria-labelledby="tab-chat">
-<div class="stage">
-<div id="logbox" class="scroll"><p id="logempty" class="empty">لا توجد رسائل بعد.</p><div id="log"></div></div>
-<button id="jump" hidden>رسائل جديدة ↓</button>
-</div>
-<div id="bar">
-<p id="chatmsg" class="msg" role="alert"></p>
-<div class="to"><label for="to">إلى</label><select id="to"></select></div>
-<div class="write"><textarea id="txt" rows="1" maxlength="8000" placeholder="اكتب رسالة" aria-label="نص الرسالة" dir="auto"></textarea><button id="send" class="primary">إرسال</button></div>
-</div>
-</section>
-
-<section id="wiki" class="panel" role="tabpanel" aria-labelledby="tab-wiki" hidden>
-<div id="wscroll" class="scroll">
-<div id="wmsg" class="msg" role="status"></div>
-<div id="wbar">
-<input id="wq" type="search" placeholder="بحث في العنوان والنص" aria-label="بحث" enterkeyhint="search" dir="auto">
-<select id="wkind" aria-label="النوع"><option value="">كل الأنواع</option><option value="skill">مهارة</option><option value="context">سياق</option><option value="note">ملاحظة</option></select>
-<button id="wnew" class="primary">صفحة جديدة</button>
-</div>
-<div id="wlist"></div>
-<p id="wquota" hidden></p>
-<article id="wview" hidden>
-<div class="row"><button id="wback">رجوع</button><button id="wcopy" class="end">نسخ النص</button><button id="wedit">تحرير</button></div>
-<h2 id="wtitle" dir="auto"></h2>
-<div id="wtags"></div><span id="wmeta"></span>
-<pre id="wbody" dir="auto"></pre>
-<details id="whistbox" hidden><summary>السجل</summary><div id="whist"></div></details>
-</article>
-<div id="wform" hidden>
-<div><label for="fslug">المعرّف (slug)</label><input id="fslug" placeholder="a-z 0-9 - _" autocapitalize="off" spellcheck="false" maxlength="64"></div>
-<div><label for="ftitle">العنوان</label><input id="ftitle" maxlength="200" dir="auto"></div>
-<div><label for="fkind">النوع</label><select id="fkind"><option value="note">ملاحظة</option><option value="skill">مهارة</option><option value="context">سياق</option></select></div>
-<div><label for="ftags">وسوم مفصولة بفاصلة (حتى 8)</label><input id="ftags" dir="auto"></div>
-<div><label for="fbody">النص</label><textarea id="fbody" dir="auto"></textarea></div>
-<div class="acts"><button id="fsave" class="primary">حفظ</button><button id="fcancel">إلغاء</button></div>
-</div>
-</div>
-</section>
-
-<section id="approvals" class="panel" role="tabpanel" aria-labelledby="tab-approvals" hidden>
-<div class="scroll"><p id="aplempty" class="empty">لا توجد مهام بانتظار موافقتك.</p><div id="apl"></div></div>
-</section>
-</div>
-<button id="toast" role="status" hidden></button>
-
+<script src="https://cdn.jsdelivr.net/npm/preact@10.29.8/dist/preact.min.umd.js" integrity="sha384-cOwCaAX2ppa31h4bKHnDnBRnVt8enjF3cuzM5lyB+rsbmCFPpEMQ9ON4GsRbTdd1" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/preact@10.29.8/hooks/dist/hooks.umd.js" integrity="sha384-5BuvBL8F0gboRla2VFizWuUXbA44J2dFYJZZGhPD7/8zlTbKMJAPtgIerv7vIpPw" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js" integrity="sha384-toVdrLSMaw7Y55MowcKqkmFL/Ek6Sky62NOk0b5sDDZBu2wcoPyyQUt9unDVjXhL" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@18.1.2/lib/marked.umd.js" integrity="sha384-nCN5FOaVTXXYilftBH/VQuC9ypBYOxrctAZn2x7ggYClXaporWSzM0y+ODhb8MTi" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.4.17/dist/purify.min.js" integrity="sha384-P0JNneQf81HOl9VwNXK76cQ9VMD6Nfsnepxb0cCOg8+UzEdzgPHAPV4wVQrvYQSx" crossorigin="anonymous"></script>
 <script nonce="__CSP_NONCE__">
-// All external data is rendered with textContent. Do not build markup from strings here.
-var KEY=sessionStorage.getItem("rk")||"";var ME="";var IS_ADMIN=false;var CAN_CONTEXT=false;
-var TAB="chat";var GEN=0;var after=0;var POLL=30000;var tm=null;var POLLING=false;var AGAIN=false;var SENDING=false;var IDEM=null;
-var SEEN={};var UNREAD=0;var MAX_BUBBLES=500;var PENDING=null;var toastTm=null;var searchTm=null;
+// External data reaches the DOM only as text through the virtual DOM, or as the sanitized fragment in Markdown(). Do not build markup from strings here.
+var READY=!!(window.preact&&window.preactHooks&&window.htm);
+var html=READY?htm.bind(preact.h):null;
+var Hooks=window.preactHooks||{};var useState=Hooks.useState;var useRef=Hooks.useRef;var useMemo=Hooks.useMemo;var useLayoutEffect=Hooks.useLayoutEffect;
+var KEY=sessionStorage.getItem("rk")||"";var GEN=0;var after=0;var POLL=30000;var tm=null;var POLLING=false;var AGAIN=false;var IDEM=null;
+var SEEN={};var GROUPS=new Map();var MAX_BUBBLES=500;var COPIES_KEPT=100;var KNOWN=null;var toastTm=null;var searchTm=null;var wikiSeq=0;var pageSeq=0;
 var LOCALE="ar-u-nu-latn";
+var FINE=!!(window.matchMedia&&matchMedia("(pointer:fine)").matches);
 var $=function(id){return document.getElementById(id);};
 var ERRORS={0:"تعذر الاتصال. تحقق من الشبكة وأعد المحاولة.",400:"الطلب غير صالح. راجع ما أدخلته.",401:"المفتاح غير صالح أو أُلغي.",403:"ما عندك صلاحية لهذه العملية.",404:"غير موجود، ربما حُذف.",409:"تغيّرت الحالة في الخادم. حدّث وأعد المحاولة.",413:"الحجم أكبر من المسموح.",415:"النص لا يمكن أن يبدأ بـHTML.",422:"مرفوض: النص يشبه سراً (مفتاح أو توكن). احذفه وأعد المحاولة.",429:"تجاوزت الحد المسموح. انتظر قليلاً ثم أعد المحاولة."};
 function errText(res,over){return (over&&over[res.status])||ERRORS[res.status]||("حدث خطأ غير متوقع ("+res.status+"). أعد المحاولة.");}
+
+// Everything the page shows lives here. Change it, then call up().
+function initial(){return {
+  view:"login",me:"",admin:false,canContext:false,recipients:[],
+  keyDraft:KEY,loginMsg:"",loginBusy:false,
+  tab:"chat",net:false,unread:0,toast:null,
+  groups:[],logLoading:true,logLoaded:false,logV:0,stick:false,jump:false,
+  to:"",draft:"",chatMsg:"",sending:false,
+  tasks:[],
+  wmode:"list",wq:"",wkind:"",wtag:"",wtags:[],wpages:null,wquota:null,wloading:false,wmsg:"",winfo:false,
+  page:null,pageLoading:false,shown:null,versions:null,hist:[],form:null,saving:false
+};}
+var S=initial();
+var bump=null;
+function up(){if(bump)bump({});}
 
 // Never rejects, so every caller handles failure the same way.
 async function api(method,path,payload){
@@ -208,131 +292,261 @@ async function api(method,path,payload){
     return {status:r.status,ok:r.ok,data:d};
   }catch(e){return {status:0,ok:false,data:{}};}
 }
-function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;}
-function bdi(text){var e=document.createElement("bdi");e.textContent=text;return e;}
-function fmtTime(ts){
-  var d=new Date(ts);var now=new Date();var t=d.toLocaleTimeString(LOCALE,{hour:"2-digit",minute:"2-digit"});
+function fmtTime(ts,seconds){
+  var d=new Date(ts);var now=new Date();var o={hour:"2-digit",minute:"2-digit"};if(seconds)o.second="2-digit";
+  var t=d.toLocaleTimeString(LOCALE,o);
   if(d.toDateString()===now.toDateString())return t;
-  var o={month:"short",day:"numeric"};if(d.getFullYear()!==now.getFullYear())o.year="numeric";
-  return d.toLocaleDateString(LOCALE,o)+" "+t;
+  var y={month:"short",day:"numeric"};if(d.getFullYear()!==now.getFullYear())y.year="numeric";
+  return d.toLocaleDateString(LOCALE,y)+" "+t;
 }
 function fmtBytes(n){return n<1024*1024?Math.round(n/1024)+"KB":(n/1024/1024).toFixed(1)+"MB";}
+function calm(){return !!(window.matchMedia&&matchMedia("(prefers-reduced-motion:reduce)").matches);}
 function toast(text,onTap){
-  var t=$("toast");t.textContent=text;t.hidden=false;t.onclick=function(){t.hidden=true;if(onTap)onTap();};
-  clearTimeout(toastTm);toastTm=setTimeout(function(){t.hidden=true;},onTap?8000:2500);
+  S.toast={text:text,onTap:onTap};up();
+  clearTimeout(toastTm);toastTm=setTimeout(function(){S.toast=null;up();},onTap?8000:2500);
 }
 async function copyText(text){
   try{await navigator.clipboard.writeText(text);toast("تم النسخ");return;}catch(e){}
   // Some in-app browsers refuse the clipboard API.
-  var a=el("textarea","offscreen");a.value=text;document.body.appendChild(a);a.select();
+  var a=document.createElement("textarea");a.className="offscreen";a.value=text;document.body.appendChild(a);a.select();
   var done=false;try{done=document.execCommand("copy");}catch(e){}
   a.remove();toast(done?"تم النسخ":"تعذر النسخ");
 }
 
+// ---------- agent identity ----------
+var TONES=12;
+function tone(n){
+  if(n==="__all__")return "";
+  var h=2166136261;for(var i=0;i<n.length;i++){h^=n.charCodeAt(i);h=Math.imul(h,16777619);}
+  return "c"+((h>>>8)%TONES);
+}
+function agentLabel(n){return n==="__all__"?"الكل":n==="__admin__"?"الأدمن":n;}
+function initials(n){
+  if(n==="__all__")return "∗";
+  if(n==="__admin__")return "أ";
+  var parts=n.split(/[-_\s]+/).filter(Boolean);
+  return (parts.slice(0,2).map(function(p){return Array.from(p)[0];}).join("")||Array.from(n)[0]||"?").toUpperCase();
+}
+function Avatar(p){
+  var t=initials(p.name);
+  return html`<svg class=${"av "+tone(p.name)} viewBox="0 0 32 32" width=${p.size||32} height=${p.size||32} aria-hidden="true"><circle cx="16" cy="16" r="16"/><text class=${Array.from(t).length>1?"two":""} x="16" y="16.5" text-anchor="middle" dominant-baseline="central">${t}</text></svg>`;
+}
+function Agent(p){return html`<span class=${"ag "+tone(p.name)}><${Avatar} name=${p.name} size=${p.size||20}/><bdi class="nm">${agentLabel(p.name)}</bdi></span>`;}
+function agentOption(n){return {value:n,label:agentLabel(n),agent:n};}
+
+// ---------- markdown ----------
+var MD_TAGS=["h1","h2","h3","h4","h5","h6","p","br","hr","strong","b","em","i","u","del","s","mark","small","sub","sup","kbd","code","pre","ul","ol","li","blockquote","a","table","thead","tbody","tr","th","td","div","span","bdi","details","summary"];
+var MD_PURIFY={ALLOWED_TAGS:MD_TAGS,ALLOWED_ATTR:["href","title","align","start"],ALLOWED_URI_REGEXP:/^(?:https?:|mailto:)/i,ADD_URI_SAFE_ATTR:["align","start"],FORCE_BODY:true,RETURN_DOM_FRAGMENT:true};
+var MD_BLOCKS="p,h1,h2,h3,h4,h5,h6,li,th,td,summary,ul,ol,blockquote,table,details";
+// dir=auto looks only at the first letter, so Arabic that opens with $RELAY flips to LTR, and it skips children with their own dir, so a list always lands on LTR.
+// Counting letters fixes both. Identifiers run long, so Arabic wins at a quarter of the Latin count.
+function textDir(s){
+  var rtl=(s.match(/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/g)||[]).length;
+  var ltr=(s.match(/[A-Za-z\u00C0-\u02FF\u0370-\u058F]/g)||[]).length;
+  return ltr&&(rtl<3||rtl*4<ltr)?"ltr":"rtl";
+}
+if(window.marked)marked.use({gfm:true,breaks:true,renderer:{checkbox:function(t){return t.checked?"☑ ":"☐ ";}}});
+// marked's emphasis scan is quadratic: a wall of * in one 100KB page froze it for two minutes in testing. Such a block is never prose, so it stays plain text.
+var MD_MARKS_MAX=1000;
+function tooManyMarks(src){return src.split(/\n\s*\n/).some(function(b){return (b.replace(/\w_+\w/g,"").match(/[*_~]/g)||[]).length>MD_MARKS_MAX;});}
+// Returns null when a library is missing or throws, and the caller then shows plain text: it never falls back to unsanitized markup.
+function mdBuild(src){
+  if(!window.marked||!window.DOMPurify||!DOMPurify.isSupported||tooManyMarks(src))return null;
+  try{
+    var frag=DOMPurify.sanitize(marked.parse(src),MD_PURIFY);
+    var cut=DOMPurify.removed.some(function(r){return r.element&&!/^(BODY|HTML|HEAD|REMOVE)$/.test(r.element.nodeName);});
+    frag.querySelectorAll(MD_BLOCKS).forEach(function(e){e.setAttribute("dir",textDir(e.textContent));});
+    frag.querySelectorAll("pre").forEach(function(e){e.setAttribute("dir","ltr");});
+    frag.querySelectorAll("code").forEach(function(e){if(!e.closest("pre"))e.setAttribute("dir","auto");});
+    frag.querySelectorAll("a").forEach(function(e){e.setAttribute("target","_blank");e.setAttribute("rel","noopener noreferrer nofollow");});
+    frag.querySelectorAll("table").forEach(function(t){var w=document.createElement("div");w.className="tw";w.setAttribute("dir",t.getAttribute("dir"));t.before(w);w.appendChild(t);});
+    return {frag:frag,cut:cut};
+  }catch(e){return null;}
+}
+function Markdown(p){
+  var box=useRef(null);var r=useState(false);var raw=r[0];
+  var built=useMemo(function(){return mdBuild(p.text);},[p.text]);
+  useLayoutEffect(function(){
+    if(raw||!built)box.current.textContent=p.text;
+    else box.current.replaceChildren(built.frag.cloneNode(true));
+  },[built,raw]);
+  // Sanitizing can hide text that other agents still read, so the reader gets a way to see all of it.
+  return html`<div id=${p.id} ref=${box} class=${"md"+(raw||!built?" plain":"")+(p.class?" "+p.class:"")} dir=${raw||!built?"auto":undefined}></div>${built&&built.cut&&html`<button type="button" class="rawbtn" onClick=${function(){r[1](!raw);}}>${raw?"عرض منسق":"أُخفي HTML غير مسموح. عرض النص الأصلي"}</button>`}`;
+}
+
+// ---------- combobox ----------
+function norm(s){return String(s).toLowerCase().normalize("NFKD").replace(/[̀-ًͯ-ٰٟ]/g,"");}
+function Chevron(){return html`<svg class="cb-c" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;}
+function Combobox(p){
+  var st=useState("closed");var state=st[0];var setState=st[1];
+  var qs=useState("");var q=qs[0];var setQ=qs[1];
+  var as=useState(-1);var act=as[0];var setAct=as[1];
+  var gs=useState({up:false,max:320});var geo=gs[0];
+  var root=useRef(null);var input=useRef(null);var list=useRef(null);var timer=useRef(0);
+  var uid=p.id+"-list";
+  var sel=p.options.find(function(o){return o.value===p.value;});
+  function filter(text){var n=norm(text);return p.options.filter(function(o){return !n||norm(o.label+" "+o.value+" "+(o.hint||"")).indexOf(n)>=0;});}
+  var shown=filter(q);
+  function firstOn(rows){return rows.findIndex(function(o){return !o.disabled;});}
+  function show(seed){
+    if(p.disabled)return;
+    clearTimeout(timer.current);
+    // Opens toward the side with room, and never taller than that room, which matters above a phone keyboard.
+    var r=root.current.getBoundingClientRect();
+    var sc=root.current.closest(".scroll");var b=sc?sc.getBoundingClientRect():{top:0,bottom:window.innerHeight};
+    var below=b.bottom-r.bottom-12;var above=r.top-Math.max(b.top,0)-12;var isUp=below<200&&above>below;
+    gs[1]({up:isUp,max:Math.max(150,Math.min(320,isUp?above:below))});
+    var rows=filter(seed||"");var cur=rows.findIndex(function(o){return o.value===p.value&&!o.disabled;});
+    setQ(seed||"");setAct(cur>=0?cur:firstOn(rows));setState("open");
+  }
+  function hide(refocus){
+    if(state!=="open")return;
+    if(calm())setState("closed");
+    else{setState("closing");timer.current=setTimeout(function(){setState("closed");},150);}
+    if(refocus&&$(p.id))$(p.id).focus();
+  }
+  function pick(o){
+    if(o.disabled)return;
+    hide(true);
+    if(o.value!==p.value)p.onChange(o.value);
+  }
+  function move(step,from){
+    if(!shown.length)return;
+    var i=from===undefined?act:from;
+    for(var n=0;n<shown.length;n++){i=(i+step+shown.length)%shown.length;if(!shown[i].disabled){setAct(i);return;}}
+  }
+  function onKey(e){
+    if(state!=="open"){
+      if(e.key==="ArrowDown"||e.key==="ArrowUp"||e.key==="Enter"||e.key===" "){e.preventDefault();show();}
+      else if(e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey){e.preventDefault();show(e.key);}
+      return;
+    }
+    if(e.key==="ArrowDown"){e.preventDefault();move(1);}
+    else if(e.key==="ArrowUp"){e.preventDefault();move(-1);}
+    else if(e.key==="Home"&&!q){e.preventDefault();move(1,-1);}
+    else if(e.key==="End"&&!q){e.preventDefault();move(-1,shown.length);}
+    else if(e.key==="Enter"&&!e.isComposing){e.preventDefault();if(shown[act])pick(shown[act]);}
+    else if(e.key==="Escape"){e.preventDefault();hide(true);}
+    else if(e.key==="Tab")hide(false);
+  }
+  useLayoutEffect(function(){
+    if(state!=="open")return;
+    // A touch keyboard would cover the list, so there the search box waits for a tap.
+    if(FINE&&input.current)input.current.focus();
+    function outside(e){if(root.current&&!root.current.contains(e.target))hide(false);}
+    document.addEventListener("pointerdown",outside,true);
+    return function(){document.removeEventListener("pointerdown",outside,true);};
+  },[state]);
+  useLayoutEffect(function(){
+    var l=list.current;var o=l&&l.querySelector(".on");if(!o)return;
+    if(o.offsetTop<l.scrollTop)l.scrollTop=o.offsetTop;
+    else if(o.offsetTop+o.offsetHeight>l.scrollTop+l.clientHeight)l.scrollTop=o.offsetTop+o.offsetHeight-l.clientHeight;
+  },[act,state]);
+  useLayoutEffect(function(){return function(){clearTimeout(timer.current);};},[]);
+  return html`<div class=${"cb"+(p.class?" "+p.class:"")} ref=${root} onKeyDown=${onKey}>
+    <button type="button" id=${p.id} class=${"cb-t"+(sel&&sel.agent?" tone "+tone(sel.agent):"")} role="combobox" aria-haspopup="listbox" aria-expanded=${state==="open"?"true":"false"} aria-controls=${uid} aria-label=${p.label} data-value=${p.value} disabled=${p.disabled} onClick=${function(){if(state==="open")hide(true);else show();}}>
+      ${sel&&sel.agent&&html`<${Avatar} name=${sel.agent} size=${24}/>`}
+      <span class="cb-v" dir="auto">${sel?sel.label:p.placeholder}</span>
+      <${Chevron}/>
+    </button>
+    ${state!=="closed"&&html`<div class=${"cb-p "+(geo.up?"up":"dn")+(state==="closing"?" out":"")} style=${{maxHeight:geo.max+"px"}}>
+      <input ref=${input} class="cb-s" type="search" role="searchbox" dir="auto" placeholder="ابحث…" aria-label=${"ابحث في "+p.label} aria-controls=${uid} aria-activedescendant=${shown[act]?uid+"-"+act:undefined} value=${q} onInput=${function(e){var v=e.target.value;setQ(v);setAct(firstOn(filter(v)));}}/>
+      <div id=${uid} ref=${list} class="cb-l" role="listbox" aria-label=${p.label}>
+        ${shown.map(function(o,i){return html`<div key=${o.value} id=${uid+"-"+i} class=${"cb-o"+(i===act?" on":"")+(o.agent?" tone "+tone(o.agent):"")} role="option" aria-selected=${o.value===p.value?"true":"false"} aria-disabled=${o.disabled?"true":undefined} data-value=${o.value} onClick=${function(){pick(o);}} onPointerMove=${function(){if(act!==i&&!o.disabled)setAct(i);}}>
+          ${o.agent&&html`<${Avatar} name=${o.agent} size=${28}/>`}
+          <span class="cb-ol" dir="auto"><bdi>${o.label}</bdi>${o.hint&&html`<span class="cb-h">${o.hint}</span>`}</span>
+          ${o.value===p.value&&html`<span class="cb-k" aria-hidden="true">✓</span>`}
+        </div>`;})}
+        ${!shown.length&&html`<div class="cb-none">لا نتائج</div>`}
+      </div>
+    </div>`}
+  </div>`;
+}
+
+function Skeleton(p){
+  if(p.kind==="chat")return html`<div class="sk-chat" aria-hidden="true">${[0,1,2,3].map(function(i){return html`<div key=${i} class=${"sk-m"+(i%2?" r":"")}><span class="sk sk-a"></span><span class="sk sk-b"></span></div>`;})}</div>`;
+  if(p.kind==="cards")return html`<div class="sk-cards" aria-hidden="true">${[0,1,2,3].map(function(i){return html`<span key=${i} class="sk sk-c"></span>`;})}</div>`;
+  return html`<div class="sk-lines" aria-hidden="true"><span class="sk sk-l t"></span><span class="sk sk-l"></span><span class="sk sk-l"></span><span class="sk sk-l s"></span></div>`;
+}
+
 // ---------- session ----------
-function loginMsg(t){$("login-msg").textContent=t;}
 async function login(){
-  var k=$("key").value.trim();
-  if(!k){loginMsg("أدخل المفتاح أولاً.");return;}
-  KEY=k;var gen=++GEN;$("login").disabled=true;loginMsg("");
+  var k=S.keyDraft.trim();
+  if(!k){S.loginMsg="أدخل المفتاح أولاً.";up();return;}
+  KEY=k;var gen=++GEN;S.loginBusy=true;S.loginMsg="";up();
   var res=await api("GET","/v2/me");
   if(gen!==GEN)return;
-  $("login").disabled=false;
+  S.loginBusy=false;
   if(!res.ok){
     if(res.status===401)sessionStorage.removeItem("rk");
-    KEY="";loginMsg(errText(res));return;
+    KEY="";S.loginMsg=errText(res);up();return;
   }
-  sessionStorage.setItem("rk",k);$("key").value="";
-  ME=res.data.agent;IS_ADMIN=res.data.is_admin;
+  sessionStorage.setItem("rk",k);S.keyDraft="";
+  S.me=res.data.agent;S.admin=res.data.is_admin;
   applyGrants(res.data);
-  $("who").textContent=IS_ADMIN?"الأدمن":ME;
-  $("tab-approvals").hidden=!IS_ADMIN;
-  $("login-view").hidden=true;$("app-view").hidden=false;
-  showTab("chat");poll();
+  S.view="app";showTab("chat");poll();
 }
 function logout(msg){
-  GEN++;KEY="";ME="";IS_ADMIN=false;after=0;SEEN={};UNREAD=0;PENDING=null;POLLING=false;AGAIN=false;IDEM=null;
-  clearTimeout(tm);clearTimeout(searchTm);sessionStorage.removeItem("rk");
-  ["log","apl","wlist","to","wbody","wtitle"].forEach(function(id){$(id).replaceChildren();});
-  ["txt","wq","fslug","ftitle","ftags","fbody","key"].forEach(function(id){$(id).value="";});
-  PAGE=null;VERSIONS=null;wikiShow("wlist");chatMsg("");setBadge("chat",0);setBadge("approvals",0);
-  document.title="Agent Relay";$("net").hidden=true;$("toast").hidden=true;
-  $("app-view").hidden=true;$("login-view").hidden=false;loginMsg(msg||"");
+  GEN++;KEY="";after=0;SEEN={};GROUPS=new Map();KNOWN=null;POLLING=false;AGAIN=false;IDEM=null;
+  clearTimeout(tm);clearTimeout(searchTm);clearTimeout(toastTm);sessionStorage.removeItem("rk");
+  S=initial();S.loginMsg=msg||"";
+  document.title="Agent Relay";up();
 }
 function applyGrants(me){
-  CAN_CONTEXT=me.can_write_context;
-  var sel=$("to");var keep=sel.value;sel.replaceChildren();
-  me.peers.concat(me.can_broadcast?["__all__"]:[]).forEach(function(n){
-    var o=el("option","",n==="__all__"?"الكل":n);o.value=n;sel.appendChild(o);
-    if(n===keep)sel.value=n;
-  });
-  var none=!sel.options.length;sel.disabled=none;$("send").disabled=none;
-  chatMsg(none?"لا يوجد وكيل مسموح لك بمراسلته. اطلب من الأدمن منحك الإذن.":"");
+  S.canContext=me.can_write_context;
+  S.recipients=me.peers.concat(me.can_broadcast?["__all__"]:[]);
+  if(S.recipients.indexOf(S.to)<0)S.to=S.recipients[0]||"";
+  S.chatMsg=S.recipients.length?"":"لا يوجد وكيل مسموح لك بمراسلته. اطلب من الأدمن منحك الإذن.";
 }
 async function refreshGrants(){
   var gen=GEN;var res=await api("GET","/v2/me");
-  if(gen===GEN&&res.ok)applyGrants(res.data);
+  if(gen===GEN&&res.ok){applyGrants(res.data);up();}
 }
 
 // ---------- tabs ----------
-function setBadge(name,n){var b=$("badge-"+name);b.textContent=n;b.hidden=!n;}
 function showTab(name){
-  TAB=name;
-  ["chat","wiki","approvals"].forEach(function(n){
-    $(n).hidden=n!==name;$("tab-"+n).setAttribute("aria-selected",n===name?"true":"false");
-  });
-  if(name==="chat"){UNREAD=0;setBadge("chat",0);toBottom();}
+  S.tab=name;
+  if(name==="chat")S.unread=0;
   // Coming back to the wiki keeps a page or a half-written draft where it was.
-  if(name==="wiki"&&!$("wlist").hidden)loadWiki();
+  if(name==="wiki"&&S.wmode==="list")loadWiki();
   if(name==="approvals")loadApprovals();
+  up();
 }
 
 // ---------- chat ----------
-function chatMsg(t){$("chatmsg").textContent=t;}
-function toBottom(){var b=$("logbox");b.scrollTop=b.scrollHeight;$("jump").hidden=true;}
-function whoLine(m){
-  var h=el("span","w");
-  var to=m.to_agent==="__all__"?"الكل":m.to_agent;
-  if(m.from_agent===ME){h.append("أنت إلى ",bdi(to));return h;}
-  h.appendChild(bdi(m.from_agent));
-  if(m.to_agent!==ME)h.append(" إلى ",bdi(to));
-  return h;
-}
-function bubble(m){
-  var div=el("div","m "+(m.from_agent===ME?"mine":"other"));
-  var h=el("div","h");
-  var copy=el("button","copy quiet","نسخ");copy.setAttribute("aria-label","نسخ الرسالة");
-  copy.addEventListener("click",function(){copyText(m.body);});
-  h.append(whoLine(m),el("span","t",fmtTime(m.ts)),copy);
-  var b=el("div","b",m.body);b.dir="auto";
-  div.append(h,b);
-  return div;
-}
+function toBottom(){var b=$("logbox");if(b)b.scrollTop=b.scrollHeight;if(S.jump){S.jump=false;up();}}
+// Same sender and same text make one bubble, wherever the copies fell. It sits at the newest copy, so a repeat is still seen arriving.
 function addMessages(list){
-  var box=$("logbox");var log=$("log");
-  var near=box.scrollHeight-box.scrollTop-box.clientHeight<80;var mine=false;var added=0;
+  var box=$("logbox");
+  var near=!box||box.scrollHeight-box.scrollTop-box.clientHeight<80;var mine=false;var added=0;
   list.forEach(function(m){
     if(SEEN[m.seq])return;
-    SEEN[m.seq]=1;log.appendChild(bubble(m));added++;
-    if(m.from_agent===ME)mine=true;else if(TAB!=="chat")UNREAD++;
+    SEEN[m.seq]=1;added++;
+    var k=m.from_agent+"\n"+m.body;var g=GROUPS.get(k);
+    if(g){GROUPS.delete(k);g.n++;g.copies.push(m);if(g.copies.length>COPIES_KEPT)g.copies.shift();g.last=m;}
+    else g={id:m.seq,n:1,copies:[m],last:m};
+    g.fresh=S.logLoaded;
+    GROUPS.set(k,g);
+    if(m.from_agent===S.me)mine=true;else if(S.tab!=="chat")S.unread++;
   });
-  while(log.children.length>MAX_BUBBLES)log.firstChild.remove();
-  $("logempty").hidden=log.children.length>0;
   if(!added)return;
-  setBadge("chat",UNREAD);
-  if(TAB==="chat"){if(near||mine)toBottom();else $("jump").hidden=false;}
+  while(GROUPS.size>MAX_BUBBLES)GROUPS.delete(GROUPS.keys().next().value);
+  S.groups=Array.from(GROUPS.values());S.logV++;
+  S.stick=near||mine;
+  if(S.tab==="chat"&&!S.stick)S.jump=true;
 }
 async function poll(){
   if(!KEY)return;
   if(POLLING){AGAIN=true;return;}
   var gen=GEN;POLLING=true;AGAIN=false;clearTimeout(tm);
-  var page=IS_ADMIN?200:100;
+  var page=S.admin?200:100;
   // The admin reads the whole log, because no agent can address the admin directly.
-  var res=await api("GET",IS_ADMIN?"/v2/log?after="+after:"/v2/inbox?sent=1&after="+after);
+  var res=await api("GET",S.admin?"/v2/log?after="+after:"/v2/inbox?sent=1&after="+after);
   if(gen!==GEN)return;
   POLLING=false;
   if(res.status===401){logout("المفتاح لم يعد صالحاً. أدخل مفتاحاً آخر.");return;}
-  $("net").hidden=res.status!==0;
+  S.net=res.status===0;
+  S.logLoading=false;
   var more=false;
   if(res.ok){
     var msgs=res.data.messages;
@@ -341,215 +555,328 @@ async function poll(){
       addMessages(msgs);
       after=res.data.next_after||after;
       more=msgs.length>=page;
-      if(!IS_ADMIN&&msgs.some(function(m){return m.from_agent!==ME;}))api("POST","/v2/ack",{seq:after});
+      if(!S.admin&&msgs.some(function(m){return m.from_agent!==S.me;}))api("POST","/v2/ack",{seq:after});
     }
-    if(IS_ADMIN)await loadApprovals();
+    S.logLoaded=!more;
+    if(S.admin)await loadApprovals();
     if(gen!==GEN)return;
   }
+  up();
   // A page in the background polls nothing. The visibilitychange handler picks it up again.
   if(document.hidden&&!AGAIN)return;
   tm=setTimeout(poll,more||AGAIN?0:POLL);
 }
+// "to:name" at the start of the text addresses the message. Returns null when the text has no such prefix.
+var TO_RE=/^\s*to:\s*([^\s,،:]*)\s*/i;
+function aliases(v){return v==="__all__"?["all","الكل","__all__"]:[v];}
+function parseTo(text){
+  var m=TO_RE.exec(text);if(!m)return null;
+  var want=m[1].toLowerCase();
+  function has(v,test){return aliases(v).some(test);}
+  return {
+    name:m[1],rest:text.slice(m[0].length),spaced:/^\s*to:\s/i.test(text),
+    peer:want?S.recipients.find(function(v){return has(v,function(a){return a===want;});})||"":"",
+    matches:S.recipients.filter(function(v){return has(v,function(a){return a.indexOf(want)===0;});})
+  };
+}
 var SEND_ERRORS={400:"تعذر الإرسال: تحقق من المستلم والنص.",403:"ما عندك إذن لمراسلة هذا الوكيل.",413:"الرسالة أطول من المسموح (8000 حرف).",429:"تجاوزت حد الإرسال. انتظر قليلاً ثم أعد المحاولة."};
 function newKey(){return window.crypto&&crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random().toString(36).slice(2);}
 async function send(){
-  var t=$("txt").value.trim();var to=$("to").value;
-  if(!t||!to||SENDING)return;
-  var gen=GEN;SENDING=true;$("send").disabled=true;chatMsg("");
+  var t=S.draft.trim();var to=S.to;var addr=parseTo(t);
+  if(addr&&addr.peer){to=addr.peer;t=addr.rest.trim();}
+  // "to:muze hi" is a typo for a recipient, and sending it to whoever is selected could reach the wrong agent. "to: everyone" is just text.
+  else if(addr&&addr.name&&!addr.spaced){S.chatMsg="لا يوجد وكيل مسموح لك باسم "+addr.name+".";up();return;}
+  if(!t||!to||S.sending)return;
+  var gen=GEN;S.sending=true;S.chatMsg="";up();
   // The same key on a retry, so a reply lost to the network can't deliver the message twice.
   if(!IDEM||IDEM.text!==t||IDEM.to!==to)IDEM={text:t,to:to,key:newKey()};
   var res=await api("POST","/v2/messages",{to:to,text:t,idem_key:IDEM.key});
-  SENDING=false;
   if(gen!==GEN)return;
-  $("send").disabled=false;
-  if(!res.ok){chatMsg(errText(res,SEND_ERRORS));return;}
-  IDEM=null;$("txt").value="";grow();poll();
+  S.sending=false;
+  if(!res.ok){S.chatMsg=errText(res,SEND_ERRORS);up();return;}
+  IDEM=null;S.to=to;S.draft="";up();poll();
 }
-function grow(){var t=$("txt");t.style.height="auto";t.style.height=Math.min(t.scrollHeight+2,132)+"px";}
+function WhoLine(p){
+  var m=p.m;
+  if(m.from_agent===S.me)return html`<span class="w"><span class=${tone(m.from_agent)}><b class="nm">أنت</b></span></span>`;
+  return html`<span class="w"><bdi class="nm">${agentLabel(m.from_agent)}</bdi>${m.to_agent!==S.me&&html`<span> إلى </span><span class=${tone(m.to_agent)}><bdi class="nm">${agentLabel(m.to_agent)}</bdi></span>`}</span>`;
+}
+function Bubble(p){
+  var g=p.g;var m=g.last;var mine=m.from_agent===S.me;
+  var ex=useState(false);var open=ex[0]&&g.n>1;
+  return html`<div class=${"m "+(mine?"mine ":"other ")+tone(m.from_agent)+(g.fresh?" enter":"")}>
+    <${Avatar} name=${m.from_agent} size=${34}/>
+    <div class="mc">
+      <div class="h"><${WhoLine} m=${m}/><span class="t">${fmtTime(m.ts)}</span><button type="button" class="copy quiet tapx" aria-label="نسخ الرسالة" onClick=${function(){copyText(m.body);}}>نسخ</button></div>
+      <div class="bw">
+        <div class="bb"><${Markdown} text=${m.body} class="b"/></div>
+        ${g.n>1&&html`<button type="button" key=${g.n} class="rep tapx" aria-expanded=${open?"true":"false"} aria-label=${"تكررت "+g.n+" مرات. اعرض النسخ"} onClick=${function(){ex[1](!ex[0]);}}>×${g.n}</button>`}
+      </div>
+      ${mine&&html`<div class="ok"><span class="tick">✓</span><span>وصلت إلى</span><${Agent} name=${m.to_agent} size=${18}/></div>`}
+      ${open&&html`<ul class="copies">
+        ${g.n>g.copies.length&&html`<li>آخر ${g.copies.length} من ${g.n}</li>`}
+        ${g.copies.slice().reverse().map(function(c){return html`<li key=${c.seq}><span class="ct">${fmtTime(c.ts,true)}</span><${Agent} name=${c.to_agent} size=${18}/></li>`;})}
+      </ul>`}
+    </div>
+  </div>`;
+}
+function Log(){
+  var v=S.logV;
+  // Reusing the same vnodes keeps typing from redrawing every bubble.
+  var rows=useMemo(function(){return S.groups.map(function(g){return html`<${Bubble} key=${g.id} g=${g} n=${g.n}/>`;});},[v]);
+  useLayoutEffect(function(){if(S.stick&&S.tab==="chat")toBottom();S.stick=false;},[v]);
+  useLayoutEffect(function(){if(S.tab==="chat")toBottom();},[S.tab]);
+  function onScroll(e){var b=e.currentTarget;if(S.jump&&b.scrollHeight-b.scrollTop-b.clientHeight<80){S.jump=false;up();}}
+  return html`<div class="stage">
+    <div id="logbox" class="scroll" onScroll=${onScroll}>
+      ${S.logLoading&&!S.groups.length&&html`<${Skeleton} kind="chat"/>`}
+      <p id="logempty" class="empty" hidden=${S.logLoading||S.groups.length>0}>لا توجد رسائل بعد.</p>
+      <div id="log">${rows}</div>
+    </div>
+    <button id="jump" hidden=${!S.jump} onClick=${toBottom}>رسائل جديدة ↓</button>
+  </div>`;
+}
+function Composer(){
+  var box=useRef(null);
+  var addr=parseTo(S.draft);var hints=addr&&!addr.peer?addr.matches:[];var none=!S.recipients.length;
+  useLayoutEffect(function(){var t=box.current;t.style.height="auto";t.style.height=Math.min(t.scrollHeight+2,132)+"px";},[S.draft]);
+  function onInput(e){
+    S.draft=e.target.value;
+    var a=parseTo(S.draft);if(a&&a.peer)S.to=a.peer;
+    up();
+  }
+  // With a mouse and keyboard Enter sends. On a touch keyboard it adds a line, and the button sends.
+  function onKey(e){if(FINE&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();send();}}
+  function complete(v){
+    S.draft="to:"+aliases(v)[0]+" "+addr.rest;S.to=v;up();
+    box.current.focus();
+  }
+  return html`<div id="bar" class=${tone(S.to)}>
+    <p id="chatmsg" class="msg" role="alert">${S.chatMsg||null}</p>
+    <div class="to"><label>إلى</label><${Combobox} id="to" label="المستلم" value=${S.to} options=${S.recipients.map(agentOption)} disabled=${none} placeholder="لا يوجد مستلم" onChange=${function(v){S.to=v;up();}}/></div>
+    ${hints.length>0&&html`<div id="tohints" class="hints">${hints.map(function(v){return html`<button type="button" key=${v} class=${"hint "+tone(v)} onClick=${function(){complete(v);}}><${Agent} name=${v} size=${22}/></button>`;})}</div>`}
+    <div class="write"><textarea id="txt" ref=${box} rows="1" maxlength="8000" placeholder="اكتب رسالة، أو ابدأ بـ to:name" aria-label="نص الرسالة" dir="auto" value=${S.draft} onInput=${onInput} onKeyDown=${onKey}></textarea><button id="send" class="primary" disabled=${none||S.sending} onClick=${send} onPointerDown=${function(e){e.preventDefault();}}>إرسال</button></div>
+  </div>`;
+}
 
 // ---------- approvals ----------
 var RISK={low:"خطر منخفض",medium:"خطر متوسط",high:"خطر عالٍ"};
-function renderTask(t){
-  var c=el("div","task");
-  var who=el("div","wh");who.append("من ",bdi(t.from_agent)," إلى ",bdi(t.to_agent)," · تنتهي "+fmtTime(t.expires_at));
-  var risk=el("span","chip badge2",RISK[t.risk]||t.risk);
-  var p=el("pre","mono",JSON.stringify(JSON.parse(t.params_json),null,2));
-  var s=el("div","sha mono","sha256: "+t.params_sha256);
-  var msg=el("p","msg");msg.setAttribute("role","alert");
-  var ok=el("button","approve","موافقة");var no=el("button","reject","رفض");
-  var acts=el("div","acts");acts.append(ok,no);
-  var q=el("p","q");q.hidden=true;
-  var yes=el("button");var back=el("button","","تراجع");
-  var sure=el("div","acts");sure.append(yes,back);sure.hidden=true;
+function prettyParams(s){try{return JSON.stringify(JSON.parse(s),null,2);}catch(e){return s;}}
+function Task(p){
+  var t=p.t;
   // Two taps, on the page itself: some in-app browsers silently refuse confirm().
-  var action="";
-  function ask(a){
-    action=a;acts.hidden=true;sure.hidden=false;q.hidden=false;msg.textContent="";
-    q.textContent=(a==="approve"?"تأكيد الموافقة على ":"تأكيد رفض ")+t.type+"؟";
-    yes.className=a==="approve"?"approve":"reject";yes.textContent=a==="approve"?"نعم، موافقة":"نعم، رفض";
-  }
-  function cancel(){acts.hidden=false;sure.hidden=true;q.hidden=true;}
-  ok.addEventListener("click",function(){ask("approve");});
-  no.addEventListener("click",function(){ask("reject");});
-  back.addEventListener("click",cancel);
-  yes.addEventListener("click",async function(){
-    yes.disabled=true;back.disabled=true;
+  var as=useState("");var action=as[0];var bs=useState(false);var ms=useState("");
+  async function go(){
+    bs[1](true);
     var res=await api("POST","/v2/tasks/"+encodeURIComponent(t.id)+"/"+action,action==="approve"?{params_sha256:t.params_sha256}:{reason:"rejected by admin"});
-    yes.disabled=false;back.disabled=false;
+    bs[1](false);
     if(res.ok)toast(action==="approve"?"تمت الموافقة":"تم الرفض");
-    else{cancel();msg.textContent=errText(res,{409:"تعذر التنفيذ: انتهت صلاحية المهمة أو تغيّرت حالتها."});}
+    else{as[1]("");ms[1](errText(res,{409:"تعذر التنفيذ: انتهت صلاحية المهمة أو تغيّرت حالتها."}));}
     loadApprovals();
-  });
-  c.append(el("div","ty",t.type),risk,who,p,s,msg,q,acts,sure);
-  return c;
+  }
+  function ask(a){as[1](a);ms[1]("");}
+  return html`<div class="task">
+    <div class="ty">${t.type}</div>
+    <span class="chip badge2">${RISK[t.risk]||t.risk}</span>
+    <div class="wh"><span>من</span><${Agent} name=${t.from_agent}/><span>إلى</span><${Agent} name=${t.to_agent}/><span>· تنتهي ${fmtTime(t.expires_at)}</span></div>
+    <pre class="mono">${prettyParams(t.params_json)}</pre>
+    <div class="sha mono">sha256: ${t.params_sha256}</div>
+    <p class="msg" role="alert">${ms[0]||null}</p>
+    <p class="q" hidden=${!action}>${action==="approve"?"تأكيد الموافقة على ":"تأكيد رفض "}${t.type}؟</p>
+    <div class="acts" hidden=${!!action}><button class="approve" onClick=${function(){ask("approve");}}>موافقة</button><button class="reject" onClick=${function(){ask("reject");}}>رفض</button></div>
+    <div class="acts" hidden=${!action}><button class=${action==="approve"?"approve":"reject"} disabled=${bs[0]} onClick=${go}>${action==="approve"?"نعم، موافقة":"نعم، رفض"}</button><button disabled=${bs[0]} onClick=${function(){as[1]("");}}>تراجع</button></div>
+  </div>`;
 }
 async function loadApprovals(){
-  if(!IS_ADMIN)return;
+  if(!S.admin)return;
   var gen=GEN;var res=await api("GET","/v2/tasks?status=awaiting_approval");
   if(gen!==GEN||!res.ok)return;
   // The hourly alarm closes expired tasks, so one can still be listed after approving it became impossible.
   var now=Date.now();var tasks=res.data.tasks.filter(function(t){return t.expires_at>now;});
   var ids=tasks.map(function(t){return t.id;});
-  var known=PENDING||[];
+  var known=KNOWN||[];
   var fresh=ids.filter(function(id){return known.indexOf(id)<0;});
-  // Same set means same cards: a redraw would close a confirmation the admin has open.
-  if(fresh.length||ids.length!==known.length){
-    $("apl").replaceChildren.apply($("apl"),tasks.map(renderTask));
-    $("aplempty").hidden=tasks.length>0;
-  }
-  PENDING=ids;
-  setBadge("approvals",ids.length);
+  KNOWN=ids;S.tasks=tasks;
   document.title=ids.length?"("+ids.length+") Agent Relay":"Agent Relay";
-  if(fresh.length&&TAB!=="approvals")toast(fresh.length===1?"مهمة جديدة بانتظار موافقتك. اضغط لفتحها.":fresh.length+" مهام بانتظار موافقتك. اضغط لفتحها.",function(){showTab("approvals");});
+  if(fresh.length&&S.tab!=="approvals")toast(fresh.length===1?"مهمة جديدة بانتظار موافقتك. اضغط لفتحها.":fresh.length+" مهام بانتظار موافقتك. اضغط لفتحها.",function(){showTab("approvals");});
+  up();
 }
 
 // ---------- wiki ----------
-var WK={skill:"مهارة",context:"سياق",note:"ملاحظة"};var PAGE=null;var VERSIONS=null;var EDITING=false;var wikiSeq=0;
+var WK={skill:"مهارة",context:"سياق",note:"ملاحظة"};var EDITING=false;
 var SLUG_RE=/^[a-z0-9][a-z0-9_-]{0,63}$/;
-function wikiShow(id){
-  ["wlist","wview","wform"].forEach(function(n){$(n).hidden=n!==id;});
-  $("wbar").hidden=id!=="wlist";$("wquota").hidden=true;wikiMsg("");$("wscroll").scrollTop=0;
+var KIND_FILTER=[{value:"",label:"كل الأنواع"},{value:"skill",label:WK.skill},{value:"context",label:WK.context},{value:"note",label:WK.note}];
+function wikiShow(mode){
+  S.wmode=mode;wikiMsg("");
+  var b=$("wscroll");if(b)b.scrollTop=0;
 }
-function wikiMsg(t,info){$("wmsg").textContent=t;$("wmsg").className=info?"msg info":"msg";}
+function wikiMsg(t,info){S.wmsg=t;S.winfo=!!info;}
 var WIKI_ERRORS={400:"راجع الحقول: العنوان حتى 200 حرف، وحتى 8 وسوم بطول 30 حرفاً.",403:"ما عندك صلاحية لتعديل هذا النوع من الصفحات.",413:"الصفحة أكبر من 100KB أو حصة الويكي امتلأت.",422:"مرفوض: النص يشبه سراً. لا تضع أسراراً في الويكي.",429:"تجاوزت حد الكتابة في الساعة. جرّب لاحقاً."};
-function wikiFail(res){wikiMsg(errText(res,WIKI_ERRORS));}
-function chip(t,cls){return el("span",cls||"chip",t);}
+function wikiFail(res){wikiMsg(errText(res,WIKI_ERRORS));up();}
 async function loadWiki(){
-  var seq=++wikiSeq;
-  var res=await api("GET","/v2/wiki?kind="+encodeURIComponent($("wkind").value)+"&q="+encodeURIComponent($("wq").value));
+  var seq=++wikiSeq;S.wloading=true;up();
+  var res=await api("GET","/v2/wiki?kind="+encodeURIComponent(S.wkind)+"&q="+encodeURIComponent(S.wq)+(S.wtag?"&tag="+encodeURIComponent(S.wtag):""));
   if(seq!==wikiSeq||!KEY)return;
+  S.wloading=false;
   if(!res.ok){wikiFail(res);return;}
   wikiMsg(res.data.pages.length?"":"لا توجد صفحات.",true);
-  $("wlist").replaceChildren.apply($("wlist"),res.data.pages.map(function(p){
-    var b=el("button","wi");b.dir="auto";
-    b.appendChild(el("span","t",p.title));
-    b.appendChild(el("span","d",(WK[p.kind]||p.kind)+" · "+p.slug+" · v"+p.version+" · "+fmtTime(p.updated_at)+(p.tags.length?" · "+p.tags.join("، "):"")));
-    b.addEventListener("click",function(){openPage(p.slug);});
-    return b;
-  }));
-  var q=res.data.quota;
-  if(q&&!$("wlist").hidden){$("wquota").textContent=q.pages+" صفحة · "+fmtBytes(q.bytes)+" من "+fmtBytes(q.max_bytes);$("wquota").hidden=false;}
+  S.wpages=res.data.pages;S.wquota=res.data.quota;
+  // Kept across filters: a list narrowed to one tag must still offer the others.
+  res.data.pages.forEach(function(p){p.tags.forEach(function(t){if(S.wtags.indexOf(t)<0)S.wtags=S.wtags.concat(t).sort();});});
+  up();
 }
-function pageMeta(version,by,at){return "النسخة "+version+" · "+by+" · "+new Date(at).toLocaleString(LOCALE);}
-function renderPage(p,meta,text){
-  $("wtitle").textContent=p.title;
-  $("wtags").replaceChildren.apply($("wtags"),[chip(WK[p.kind]||p.kind)].concat(p.tags.map(function(t){return chip(t);})));
-  if(VERSIONS)$("wtags").appendChild(chip(VERSIONS+" نسخة","chip badge2"));
-  $("wmeta").textContent=meta;
-  $("wbody").textContent=text;
-}
+function pageMeta(version,by,at,body,old){return {version:version,by:by,at:at,body:body,old:!!old};}
 async function openPage(slug){
+  var seq=++pageSeq;var gen=GEN;S.pageLoading=true;S.page=null;S.shown=null;S.versions=null;S.hist=[];wikiShow("view");up();
   var res=await api("GET","/v2/wiki/"+encodeURIComponent(slug));
-  if(!res.ok){wikiFail(res);return;}
-  PAGE=res.data;VERSIONS=null;wikiShow("wview");
-  renderPage(PAGE,pageMeta(PAGE.version,PAGE.updated_by,PAGE.updated_at),PAGE.body);
-  // Without the grant the server refuses the save, so don't let anyone write a long edit first.
-  $("wedit").hidden=PAGE.kind==="context"&&!CAN_CONTEXT;
-  $("whistbox").hidden=true;$("whistbox").open=false;
-  if(IS_ADMIN)loadHistory(PAGE);
+  if(seq!==pageSeq||gen!==GEN)return;
+  S.pageLoading=false;
+  if(!res.ok){wikiShow("list");wikiFail(res);return;}
+  var p=res.data;S.page=p;S.shown=pageMeta(p.version,p.updated_by,p.updated_at,p.body);up();
+  if(S.admin)loadHistory(p);
 }
 async function loadHistory(p){
   var res=await api("GET","/v2/wiki/"+encodeURIComponent(p.slug)+"/history");
-  if(!res.ok||!PAGE||PAGE.slug!==p.slug)return;
-  VERSIONS=res.data.total+1;
-  $("wtags").appendChild(chip(VERSIONS+" نسخة","chip badge2"));
-  var cur=el("button","","v"+p.version+" (الحالية)");
-  cur.addEventListener("click",function(){renderPage(p,pageMeta(p.version,p.updated_by,p.updated_at),p.body);wikiMsg("");});
-  $("whist").replaceChildren.apply($("whist"),[cur].concat(res.data.versions.map(function(v){
-    var b=el("button","","v"+v.version+" · "+v.updated_by+" · "+new Date(v.updated_at).toLocaleString(LOCALE)+" · "+(v.deleted?"حذف":fmtBytes(v.size)));
-    b.disabled=v.deleted;
-    if(!v.deleted)b.addEventListener("click",function(){showVersion(p,v.version);});
-    return b;
-  })));
-  $("whistbox").hidden=false;
+  if(!res.ok||!S.page||S.page.slug!==p.slug)return;
+  S.versions=res.data.total+1;S.hist=res.data.versions;up();
 }
+function showCurrent(){var p=S.page;S.shown=pageMeta(p.version,p.updated_by,p.updated_at,p.body);wikiMsg("");up();}
 async function showVersion(p,version){
   var res=await api("GET","/v2/wiki/"+encodeURIComponent(p.slug)+"/history/"+version);
   if(!res.ok){wikiFail(res);return;}
-  $("wmeta").textContent=pageMeta(version,res.data.updated_by,res.data.updated_at);
-  $("wbody").textContent=res.data.body;
+  S.shown=pageMeta(version,res.data.updated_by,res.data.updated_at,res.data.body,true);
   wikiMsg("تعرض نسخة قديمة. التحرير يبدأ دائماً من النسخة الحالية.",true);
-  $("wscroll").scrollTop=0;
+  var b=$("wscroll");if(b)b.scrollTop=0;
+  up();
 }
 function openForm(p){
-  EDITING=!!p;wikiShow("wform");
-  $("fslug").value=p?p.slug:"";$("fslug").disabled=!!p;
-  $("ftitle").value=p?p.title:"";$("fkind").value=p?p.kind:"note";
-  $("ftags").value=p?p.tags.join(", "):"";$("fbody").value=p?p.body:"";
-  $("fkind").querySelector('option[value="context"]').disabled=!CAN_CONTEXT;
+  EDITING=!!p;wikiShow("form");
+  S.form={slug:p?p.slug:"",title:p?p.title:"",kind:p?p.kind:"note",tags:p?p.tags.join(", "):"",body:p?p.body:""};
+  up();
 }
 async function saveWiki(){
-  var slug=$("fslug").value.trim();var title=$("ftitle").value.trim();var text=$("fbody").value;
-  var tags=$("ftags").value.split(/[,،]/).map(function(t){return t.trim();}).filter(Boolean);
-  if(!SLUG_RE.test(slug)){wikiMsg("المعرّف يبدأ بحرف إنجليزي صغير أو رقم، وفيه فقط a-z و0-9 و- و_.");return;}
-  if(!title){wikiMsg("العنوان مطلوب.");return;}
-  if(!text.trim()){wikiMsg("النص مطلوب.");return;}
-  if(tags.length>8){wikiMsg("الحد 8 وسوم.");return;}
-  $("fsave").disabled=true;wikiMsg("");
+  var F=S.form;var slug=F.slug.trim();var title=F.title.trim();var text=F.body;
+  var tags=F.tags.split(/[,،]/).map(function(t){return t.trim();}).filter(Boolean);
+  function stop(t){wikiMsg(t);up();}
+  if(!SLUG_RE.test(slug))return stop("المعرّف يبدأ بحرف إنجليزي صغير أو رقم، وفيه فقط a-z و0-9 و- و_.");
+  if(!title)return stop("العنوان مطلوب.");
+  if(!text.trim())return stop("النص مطلوب.");
+  if(tags.length>8)return stop("الحد 8 وسوم.");
+  var gen=GEN;S.saving=true;wikiMsg("");up();
   // if_version makes the server refuse instead of replacing a page someone else just wrote.
-  var res=await api("PUT","/v2/wiki/"+encodeURIComponent(slug),{title:title,kind:$("fkind").value,body:text,tags:tags,if_version:EDITING?PAGE.version:0});
-  $("fsave").disabled=false;
-  if(res.status===409){
-    wikiMsg(EDITING?"تغيّرت الصفحة أثناء تحريرك. انسخ نصك، ثم ارجع وافتحها من جديد.":"هذا المعرّف مستخدم. افتح الصفحة وحرّرها، أو اختر معرّفاً آخر.");
-    return;
-  }
+  var res=await api("PUT","/v2/wiki/"+encodeURIComponent(slug),{title:title,kind:F.kind,body:text,tags:tags,if_version:EDITING?S.page.version:0});
+  if(gen!==GEN)return;
+  S.saving=false;
+  if(res.status===409)return stop(EDITING?"تغيّرت الصفحة أثناء تحريرك. انسخ نصك، ثم ارجع وافتحها من جديد.":"هذا المعرّف مستخدم. افتح الصفحة وحرّرها، أو اختر معرّفاً آخر.");
   if(!res.ok){wikiFail(res);return;}
   await openPage(slug);
 }
-
-// ---------- wiring ----------
-$("login").addEventListener("click",login);
-$("key").addEventListener("keydown",function(e){if(e.key==="Enter")login();});
-$("logout").addEventListener("click",function(){logout();});
-["chat","wiki","approvals"].forEach(function(n){$("tab-"+n).addEventListener("click",function(){showTab(n);});});
-$("send").addEventListener("click",send);
-// Keeps the keyboard open when the send button is tapped.
-$("send").addEventListener("pointerdown",function(e){e.preventDefault();});
-$("jump").addEventListener("click",toBottom);
-$("logbox").addEventListener("scroll",function(){var b=$("logbox");if(b.scrollHeight-b.scrollTop-b.clientHeight<80)$("jump").hidden=true;});
-$("txt").addEventListener("input",grow);
-// With a mouse and keyboard Enter sends. On a touch keyboard it adds a line, and the button sends.
-var FINE=!!(window.matchMedia&&matchMedia("(pointer:fine)").matches);
-$("txt").addEventListener("keydown",function(e){if(FINE&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing){e.preventDefault();send();}});
-$("wkind").addEventListener("change",loadWiki);
-$("wq").addEventListener("input",function(){clearTimeout(searchTm);searchTm=setTimeout(loadWiki,350);});
-$("wq").addEventListener("keydown",function(e){if(e.key==="Enter"){clearTimeout(searchTm);loadWiki();}});
-$("wnew").addEventListener("click",function(){openForm(null);});
-$("wback").addEventListener("click",function(){wikiShow("wlist");loadWiki();});
-$("wedit").addEventListener("click",function(){if(PAGE)openForm(PAGE);});
-$("wcopy").addEventListener("click",function(){copyText($("wbody").textContent);});
-$("fsave").addEventListener("click",saveWiki);
-$("fcancel").addEventListener("click",function(){if(EDITING&&PAGE)openPage(PAGE.slug);else{wikiShow("wlist");loadWiki();}});
-document.addEventListener("visibilitychange",function(){if(!document.hidden&&KEY&&ME){refreshGrants();poll();}});
-window.addEventListener("online",function(){if(KEY&&ME)poll();});
-// iOS Safari keeps the layout viewport when the keyboard opens, so the page follows the visual one instead.
-if(window.visualViewport){
-  var fitViewport=function(){
-    var v=window.visualViewport;if(v.scale>1.01)return;
-    document.documentElement.style.setProperty("--app-h",v.height+"px");window.scrollTo(0,0);
-  };
-  window.visualViewport.addEventListener("resize",fitViewport);
-  window.visualViewport.addEventListener("scroll",fitViewport);
+function WikiItem(p){
+  return html`<button class="wi" dir="auto" onClick=${function(){openPage(p.p.slug);}}>
+    <span class="t">${p.p.title}</span>
+    <span class="d">${WK[p.p.kind]||p.p.kind} · ${p.p.slug} · v${p.p.version} · ${fmtTime(p.p.updated_at)}${p.p.tags.length?" · "+p.p.tags.join("، "):""}</span>
+    <span class="by"><${Agent} name=${p.p.updated_by} size=${18}/></span>
+  </button>`;
 }
-if(KEY){$("key").value=KEY;login();}
+function WikiList(){
+  var pages=S.wpages;
+  var rows=useMemo(function(){return (pages||[]).map(function(p){return html`<${WikiItem} key=${p.slug} p=${p}/>`;});},[pages]);
+  var q=S.wquota;var on=S.wmode==="list";
+  function search(e){S.wq=e.target.value;clearTimeout(searchTm);searchTm=setTimeout(loadWiki,350);}
+  function searchKey(e){if(e.key==="Enter"){clearTimeout(searchTm);loadWiki();}}
+  function filterBy(k){return function(v){S[k]=v;loadWiki();};}
+  return html`<div id="wbar" hidden=${!on}>
+      <div id="wsearch" class="wide"><input id="wq" type="search" placeholder="بحث في العنوان والنص" aria-label="بحث" enterkeyhint="search" dir="auto" value=${S.wq} onInput=${search} onKeyDown=${searchKey}/><button id="wnew" class="primary" onClick=${function(){openForm(null);}}>صفحة جديدة</button></div>
+      <${Combobox} id="wkind" label="النوع" value=${S.wkind} options=${KIND_FILTER} onChange=${filterBy("wkind")}/>
+      <${Combobox} id="wtag" label="الوسم" value=${S.wtag} options=${[{value:"",label:"كل الوسوم"}].concat(S.wtags.map(function(t){return {value:t,label:t};}))} onChange=${filterBy("wtag")}/>
+      <${Combobox} id="wpage" class="wide" label="الصفحة" value="" placeholder="انتقل إلى صفحة…" options=${(pages||[]).map(function(p){return {value:p.slug,label:p.title,hint:p.slug};})} onChange=${openPage}/>
+    </div>
+    ${on&&S.wloading&&!pages&&html`<${Skeleton} kind="cards"/>`}
+    <div id="wlist" class=${S.wloading&&pages?"busy":""} hidden=${!on} aria-busy=${S.wloading?"true":"false"}>${rows}</div>
+    <p id="wquota" hidden=${!on||!q}>${q?q.pages+" صفحة · "+fmtBytes(q.bytes)+" من "+fmtBytes(q.max_bytes):null}</p>`;
+}
+function WikiView(){
+  var p=S.page;var v=S.shown;
+  function back(){wikiShow("list");loadWiki();}
+  var options=!p?[]:[{value:p.version,label:"v"+p.version+" (الحالية)",agent:p.updated_by,hint:p.updated_by+" · "+new Date(p.updated_at).toLocaleString(LOCALE)}].concat(S.hist.map(function(h){
+    return {value:h.version,label:"v"+h.version,agent:h.updated_by,disabled:h.deleted,hint:h.updated_by+" · "+new Date(h.updated_at).toLocaleString(LOCALE)+" · "+(h.deleted?"حذف":fmtBytes(h.size))};
+  }));
+  return html`<article id="wview" hidden=${S.wmode!=="view"}>
+    <div class="row"><button id="wback" onClick=${back}>رجوع</button><button id="wcopy" class="end" disabled=${!v} onClick=${function(){copyText(v.body);}}>نسخ النص</button><button id="wedit" hidden=${!p||(p.kind==="context"&&!S.canContext)} onClick=${function(){openForm(p);}}>تحرير</button></div>
+    ${S.pageLoading&&html`<${Skeleton} kind="page"/>`}
+    ${p&&v&&html`<h2 id="wtitle" dir="auto">${p.title}</h2>
+    <div id="wtags"><span class="chip">${WK[p.kind]||p.kind}</span>${p.tags.map(function(t){return html`<span key=${t} class="chip">${t}</span>`;})}${S.versions&&html`<span class="chip badge2">${S.versions} نسخة</span>`}</div>
+    <div id="wmeta"><span>النسخة ${v.version}</span><span>·</span><${Agent} name=${v.by} size=${18}/><span>·</span><span>${new Date(v.at).toLocaleString(LOCALE)}</span></div>
+    <${Markdown} id="wbody" text=${v.body}/>
+    <div id="whistbox" hidden=${!S.versions}><label>السجل</label><${Combobox} id="whist" label="النسخة" value=${v.version} options=${options} onChange=${function(n){if(n===p.version)showCurrent();else showVersion(p,n);}}/></div>`}
+  </article>`;
+}
+function WikiForm(){
+  var F=S.form;if(!F)return null;
+  function field(k){return function(e){F[k]=e.target.value;};}
+  var kinds=[{value:"note",label:WK.note},{value:"skill",label:WK.skill},{value:"context",label:WK.context,disabled:!S.canContext}];
+  function cancel(){if(EDITING&&S.page)openPage(S.page.slug);else{wikiShow("list");loadWiki();}}
+  return html`<div id="wform" hidden=${S.wmode!=="form"}>
+    <div><label for="fslug">المعرّف (slug)</label><input id="fslug" placeholder="a-z 0-9 - _" autocapitalize="off" spellcheck=${false} maxlength="64" value=${F.slug} disabled=${EDITING} onInput=${field("slug")}/></div>
+    <div><label for="ftitle">العنوان</label><input id="ftitle" maxlength="200" dir="auto" value=${F.title} onInput=${field("title")}/></div>
+    <div><label>النوع</label><${Combobox} id="fkind" label="النوع" value=${F.kind} options=${kinds} onChange=${function(v){F.kind=v;up();}}/></div>
+    <div><label for="ftags">وسوم مفصولة بفاصلة (حتى 8)</label><input id="ftags" dir="auto" value=${F.tags} onInput=${field("tags")}/></div>
+    <div><label for="fbody">النص (Markdown)</label><textarea id="fbody" dir="auto" value=${F.body} onInput=${field("body")}></textarea></div>
+    <div class="acts"><button id="fsave" class="primary" disabled=${S.saving} onClick=${saveWiki}>حفظ</button><button id="fcancel" onClick=${cancel}>إلغاء</button></div>
+  </div>`;
+}
+
+// ---------- screens ----------
+function Login(){
+  return html`<main id="login-view" class="screen">
+    <h1>Agent Relay</h1>
+    <p>قناة وكلائك. أدخل مفتاحك للمتابعة.</p>
+    <label for="key">المفتاح</label>
+    <input id="key" type="password" autocomplete="current-password" autocapitalize="off" spellcheck=${false} enterkeyhint="go" value=${S.keyDraft} onInput=${function(e){S.keyDraft=e.target.value;}} onKeyDown=${function(e){if(e.key==="Enter")login();}}/>
+    <button id="login" class="primary" disabled=${S.loginBusy} onClick=${login}>دخول</button>
+    <p id="login-msg" class="msg" role="alert">${S.loginMsg||null}</p>
+  </main>`;
+}
+function Badge(p){return html`<span id=${p.id} class="badge" hidden=${!p.n}>${p.n}</span>`;}
+function App(){
+  bump=useState(0)[1];
+  var count=S.tasks.length;
+  return html`${S.view==="login"?html`<${Login}/>`:html`<div id="app-view" class="screen">
+    <header><b>Agent Relay</b><span id="who"><${Agent} name=${S.me} size=${24}/></span><button id="logout" class="quiet" onClick=${function(){logout();}}>خروج</button></header>
+    <nav role="tablist" aria-label="الأقسام">
+      <button id="tab-chat" role="tab" aria-controls="chat" aria-selected=${S.tab==="chat"?"true":"false"} onClick=${function(){showTab("chat");}}>شات <${Badge} id="badge-chat" n=${S.unread}/></button>
+      <button id="tab-wiki" role="tab" aria-controls="wiki" aria-selected=${S.tab==="wiki"?"true":"false"} onClick=${function(){showTab("wiki");}}>ويكي</button>
+      <button id="tab-approvals" role="tab" aria-controls="approvals" aria-selected=${S.tab==="approvals"?"true":"false"} hidden=${!S.admin} onClick=${function(){showTab("approvals");}}>موافقات <${Badge} id="badge-approvals" n=${count}/></button>
+    </nav>
+    <div id="net" role="status" hidden=${!S.net}>تعذر الاتصال. تجري إعادة المحاولة…</div>
+    <section id="chat" class="panel" role="tabpanel" aria-labelledby="tab-chat" hidden=${S.tab!=="chat"}><${Log}/><${Composer}/></section>
+    <section id="wiki" class="panel" role="tabpanel" aria-labelledby="tab-wiki" hidden=${S.tab!=="wiki"}>
+      <div id="wscroll" class="scroll">
+        <div id="wmsg" class=${S.winfo?"msg info":"msg"} role="status">${S.wmsg||null}</div>
+        <${WikiList}/><${WikiView}/><${WikiForm}/>
+      </div>
+    </section>
+    <section id="approvals" class="panel" role="tabpanel" aria-labelledby="tab-approvals" hidden=${S.tab!=="approvals"}>
+      <div class="scroll"><p id="aplempty" class="empty" hidden=${count>0}>لا توجد مهام بانتظار موافقتك.</p><div id="apl">${S.tasks.map(function(t){return html`<${Task} key=${t.id} t=${t}/>`;})}</div></div>
+    </section>
+  </div>`}
+  <button id="toast" role="status" hidden=${!S.toast} onClick=${function(){var t=S.toast;S.toast=null;up();if(t&&t.onTap)t.onTap();}}>${S.toast?S.toast.text:null}</button>`;
+}
+function start(){
+  var root=$("root");root.replaceChildren();preact.render(html`<${App}/>`,root);
+  document.addEventListener("visibilitychange",function(){if(!document.hidden&&KEY&&S.me){refreshGrants();poll();}});
+  window.addEventListener("online",function(){if(KEY&&S.me)poll();});
+  // iOS Safari keeps the layout viewport when the keyboard opens, so the page follows the visual one instead.
+  if(window.visualViewport){
+    var fitViewport=function(){
+      var v=window.visualViewport;if(v.scale>1.01)return;
+      document.documentElement.style.setProperty("--app-h",v.height+"px");window.scrollTo(0,0);
+    };
+    window.visualViewport.addEventListener("resize",fitViewport);
+    window.visualViewport.addEventListener("scroll",fitViewport);
+  }
+  if(KEY)login();
+}
+if(READY)start();
+else $("boot-msg").textContent="تعذر تحميل مكتبات الواجهة من الشبكة. تحقق من الاتصال ثم أعد تحميل الصفحة.";
 </script></body></html>

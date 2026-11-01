@@ -13,8 +13,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install wrangler
-        run: npm install -g wrangler@^4
+      - name: Install wrangler, jsdom and the page libraries
+        run: npm install --no-package-lock --no-audit --no-fund
       - name: Smoke tests (local relay)
         run: bash test/smoke.sh
       - name: Migration tests

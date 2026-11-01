@@ -880,6 +880,15 @@ export class RelayHub {
 
 import PAGE_HTML from './page.html';
 
+// The exact CDN files src/page.html loads, each pinned there with an integrity hash. page-check keeps the two lists equal.
+const PAGE_SCRIPTS = [
+  'https://cdn.jsdelivr.net/npm/preact@10.29.8/dist/preact.min.umd.js',
+  'https://cdn.jsdelivr.net/npm/preact@10.29.8/hooks/dist/hooks.umd.js',
+  'https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js',
+  'https://cdn.jsdelivr.net/npm/marked@18.1.2/lib/marked.umd.js',
+  'https://cdn.jsdelivr.net/npm/dompurify@3.4.17/dist/purify.min.js',
+].join(' ');
+
 // Best effort: per-isolate, so it dampens floods of the public page rather than enforcing an exact quota.
 const pageHits = new Map();
 function pageAllowed(ip) {
@@ -898,7 +907,7 @@ export default {
       const nonce = crypto.randomUUID().replace(/-/g, '');
       return new Response(PAGE_HTML.replaceAll('__CSP_NONCE__', nonce), { headers: {
         'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
-        'Content-Security-Policy': "default-src 'none'; script-src 'nonce-" + nonce + "'; style-src 'nonce-" + nonce + "'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        'Content-Security-Policy': "default-src 'none'; script-src 'nonce-" + nonce + "' " + PAGE_SCRIPTS + "; style-src 'nonce-" + nonce + "'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
         'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' } });
     }
 

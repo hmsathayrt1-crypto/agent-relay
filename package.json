@@ -7,10 +7,15 @@
   "scripts": {
     "dev": "wrangler dev --local",
     "deploy": "wrangler deploy",
-    "test": "bash test/smoke.sh && bash test/migration.sh"
+    "test": "bash test/smoke.sh && bash test/migration.sh",
+    "test:browser": "node test/browser-check.mjs"
   },
   "devDependencies": {
+    "dompurify": "3.4.17",
+    "htm": "3.1.1",
     "jsdom": "^26.0.0",
+    "marked": "18.1.2",
+    "preact": "10.29.8",
     "wrangler": "^4.0.0"
   }
 }
