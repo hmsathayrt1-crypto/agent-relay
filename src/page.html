@@ -212,6 +212,15 @@ button.wi{display:block;width:100%;min-height:60px;padding:10px 14px;text-align:
 .task pre{direction:ltr;text-align:left;background:var(--bg);border-radius:8px;padding:10px;margin:8px 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
 .task .sha{direction:ltr;text-align:left;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .task .acts{display:flex;gap:8px;margin-top:12px}
+.agent-row{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-bottom:10px}
+.agent-row .grow{flex:1;min-width:0}
+.agent-row .st{font-size:12px;color:var(--muted)}
+.agent-row.revoked{opacity:.55}
+#agform{display:flex;gap:8px;margin:4px 0 14px}
+#agform input{flex:1;min-width:0}
+.akey{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.akey code{display:block;word-break:break-all;direction:ltr;text-align:left;margin:8px 0;font-size:13px}
+.akey .warn{color:var(--muted);font-size:13px}
 .task .acts button{flex:1;padding:0 8px}
 .task .q{font-weight:600;margin:12px 0 0}
 .task .msg{margin-top:8px}
@@ -275,6 +284,7 @@ function initial(){return {
   groups:[],logLoading:true,logLoaded:false,logV:0,stick:false,jump:false,
   to:"",draft:"",chatMsg:"",sending:false,
   tasks:[],
+  agents:null,agAdding:false,agName:"",agKey:null,agErr:"",
   wmode:"list",wq:"",wkind:"",wtag:"",wtags:[],wpages:null,wquota:null,wloading:false,wmsg:"",winfo:false,
   page:null,pageLoading:false,shown:null,versions:null,hist:[],form:null,saving:false
 };}
@@ -510,6 +520,7 @@ function showTab(name){
   // Coming back to the wiki keeps a page or a half-written draft where it was.
   if(name==="wiki"&&S.wmode==="list")loadWiki();
   if(name==="approvals")loadApprovals();
+  if(name==="agents")loadAgents();
   up();
 }
 
@@ -657,6 +668,57 @@ function Composer(){
     ${hints.length>0&&html`<div id="tohints" class="hints">${hints.map(function(v){return html`<button type="button" key=${v} class=${"hint "+tone(v)} onClick=${function(){complete(v);}}><${Agent} name=${v} size=${22}/></button>`;})}</div>`}
     <div class="write"><textarea id="txt" ref=${box} rows="1" maxlength="8000" placeholder="اكتب رسالة، أو ابدأ بـ to:name" aria-label="نص الرسالة" dir="auto" value=${S.draft} onInput=${onInput} onKeyDown=${onKey}></textarea><button id="send" class="primary" disabled=${none||S.sending} onClick=${send} onPointerDown=${function(e){e.preventDefault();}}>إرسال</button></div>
   </div>`;
+}
+
+// ---------- agents (admin) ----------
+var NAME_OK=/^[a-z0-9_-]{1,32}$/;
+var AG_RESERVED=["__admin__","__all__","__wiki__"];
+async function loadAgents(){
+  if(!S.admin)return;
+  var gen=GEN;var res=await api("GET","/v2/agents");
+  if(gen!==GEN||!res.ok)return;
+  S.agents=res.data.agents;up();
+}
+function AgentRow(p){
+  var a=p.a;
+  var cs=useState("");var conf=cs[0];var setConf=cs[1];
+  async function revoke(){
+    var res=await api("POST","/v2/revoke",{agent:a.name});
+    if(res.ok){toast("أُلغي "+a.name);loadAgents();}
+    else setConf("");
+  }
+  return html`<div class=${"agent-row"+(a.status==="revoked"?" revoked":"")}>
+    <${Agent} name=${a.name} size=${26}/>
+    <div class="grow"><div class="st">${a.status==="active"?"نشط":"ملغى"} · شوهد ${fmtTime(a.last_seen)}</div></div>
+    ${a.status==="active"?html`<button class="quiet" onClick=${function(){conf?revoke():setConf(true);}}>${conf?"تأكيد الإلغاء؟":"إلغاء"}</button>`:null}
+  </div>`;
+}
+function AgentsTab(){
+  if(!S.admin)return null;
+  return html`<div class="scroll">
+    ${S.agKey?html`<div class="akey">
+      <b>مفتاح ${S.agKey.agent} — يظهر الآن فقط</b>
+      <code class="mono" id="newkey">${S.agKey.key}</code>
+      <div class="acts"><button class="primary" onClick=${function(){copyText(S.agKey.key);}}>نسخ المفتاح</button><button onClick=${function(){S.agKey=null;up();}}>تم، خزّنته</button></div>
+      <p class="warn">الوكيل الجديد بلا أي صلاحيات بعد (لا يراسل أحداً). اطلب من hermes منحه الصلاحيات، أو استخدم /v2/acl.</p>
+    </div>`:null}
+    <form id="agform" onSubmit=${function(e){e.preventDefault();addAgent();}}>
+      <input id="agname" class="mono" value=${S.agName} placeholder="اسم-جديد بالإنجليزية مثل my-bot" onInput=${function(e){S.agName=e.target.value;S.agErr="";up();}}/>
+      <button class="primary" disabled=${S.agAdding||!S.agName} >${S.agAdding?"…":"إضافة وكيل"}</button>
+    </form>
+    ${S.agErr?html`<p class="msg" role="alert">${S.agErr}</p>`:null}
+    ${S.agents===null?html`<p class="empty">جاري التحميل…</p>`:(S.agents.length===0?html`<p class="empty">لا وكلاء بعد.</p>`:S.agents.map(function(a){return html`<${AgentRow} key=${a.name} a=${a}/>`;}))}
+  </div>`;
+}
+async function addAgent(){
+  var name=(S.agName||"").trim().toLowerCase();
+  if(!NAME_OK.test(name)||AG_RESERVED.indexOf(name)>=0){S.agErr="الاسم: حروف إنجليزية صغيرة وأرقام و - و _ فقط (حتى 32).";up();return;}
+  S.agAdding=true;S.agErr="";up();
+  var res=await api("POST","/v2/join",{agent:name});
+  S.agAdding=false;
+  if(res.ok){S.agName="";S.agKey={agent:name,key:res.data.key};loadAgents();}
+  else S.agErr=errText(res,{409:"الاسم مستخدم بالفعل."});
+  up();
 }
 
 // ---------- approvals ----------
@@ -847,6 +909,7 @@ function App(){
       <button id="tab-chat" role="tab" aria-controls="chat" aria-selected=${S.tab==="chat"?"true":"false"} onClick=${function(){showTab("chat");}}>شات <${Badge} id="badge-chat" n=${S.unread}/></button>
       <button id="tab-wiki" role="tab" aria-controls="wiki" aria-selected=${S.tab==="wiki"?"true":"false"} onClick=${function(){showTab("wiki");}}>ويكي</button>
       <button id="tab-approvals" role="tab" aria-controls="approvals" aria-selected=${S.tab==="approvals"?"true":"false"} hidden=${!S.admin} onClick=${function(){showTab("approvals");}}>موافقات <${Badge} id="badge-approvals" n=${count}/></button>
+      <button id="tab-agents" role="tab" aria-controls="agents" aria-selected=${S.tab==="agents"?"true":"false"} hidden=${!S.admin} onClick=${function(){showTab("agents");}}>وكلاء</button>
     </nav>
     <div id="net" role="status" hidden=${!S.net}>تعذر الاتصال. تجري إعادة المحاولة…</div>
     <section id="chat" class="panel" role="tabpanel" aria-labelledby="tab-chat" hidden=${S.tab!=="chat"}><${Log}/><${Composer}/></section>
@@ -858,6 +921,9 @@ function App(){
     </section>
     <section id="approvals" class="panel" role="tabpanel" aria-labelledby="tab-approvals" hidden=${S.tab!=="approvals"}>
       <div class="scroll"><p id="aplempty" class="empty" hidden=${count>0}>لا توجد مهام بانتظار موافقتك.</p><div id="apl">${S.tasks.map(function(t){return html`<${Task} key=${t.id} t=${t}/>`;})}</div></div>
+    </section>
+    <section id="agents" class="panel" role="tabpanel" aria-labelledby="tab-agents" hidden=${S.tab!=="agents"}>
+      <${AgentsTab}/>
     </section>
   </div>`}
   <button id="toast" role="status" hidden=${!S.toast} onClick=${function(){var t=S.toast;S.toast=null;up();if(t&&t.onTap)t.onTap();}}>${S.toast?S.toast.text:null}</button>`;

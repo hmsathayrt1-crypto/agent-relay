@@ -198,7 +198,7 @@ const msgs = [
   await tick();
   check('stored key logs in', !!app.$('app-view') && app.calls[0].url === '/v2/me' && app.calls[0].auth === 'Bearer admin-key');
   const tabs = app.all('[role=tab]');
-  check('three tabs for the admin', tabs.length === 3 && tabs.every(t => !t.hidden) && !!app.$('tab-chat') && !!app.$('tab-wiki') && !!app.$('tab-approvals'));
+  check('four tabs for the admin', tabs.length === 4 && tabs.every(t => !t.hidden) && !!app.$('tab-chat') && !!app.$('tab-wiki') && !!app.$('tab-approvals') && !!app.$('tab-agents'));
   check('chat is the default tab', !app.$('chat').hidden && app.$('wiki').hidden && app.$('approvals').hidden && app.$('tab-chat').getAttribute('aria-selected') === 'true');
   check('admin reads the log, not its own inbox', app.calls.some(c => c.url === '/v2/log?after=0') && !app.calls.some(c => c.url.includes('inbox')));
   const bubbles = app.all('#log .m');
